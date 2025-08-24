@@ -14,9 +14,8 @@ def validate_email_format(email: str):
 
 def validate_email_unique(email: str):
     """Checks if email already exists"""
-    if User.objects.filter(email=email).exists():
-        raise ValidationError(
-            {"E-Mail": "E-Mail-Adresse wird bereits verwendet."})
+    if User.objects.filter(email__iexact=email).exists():
+        raise ValidationError({"email": "E-Mail-Adresse wird bereits verwendet."})
 
 
 def validate_password_strength(password: str):
