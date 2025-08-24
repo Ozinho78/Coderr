@@ -12,29 +12,28 @@ from core.utils.validators import (
 
 
 class RegistrationSerializer(serializers.Serializer):
-    username = serializers.CharField(max_length=150)
+    """Serializes registration data"""
+    username = serializers.CharField(max_length=50)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
     repeated_password = serializers.CharField(write_only=True, min_length=8)
     type = serializers.ChoiceField(choices=Profile.TYPE_CHOICES)
 
-    # Username-Check wie gehabt
+    # username check, matching with iexact (i=insensitive) to avoid multiple usernames with upper/lower chars
     def validate_username(self, v):
         if User.objects.filter(username__iexact=v).exists():
             raise serializers.ValidationError("Username ist bereits vergeben.")
         return v
 
-    # E-Mail: Format + (case-insensitive) Unique über deine Validatoren
+    # checks unique email address
     def validate_email(self, v):
         try:
             validate_email_format(v)
-            # dein Helper prüft aktuell case-sensitive; wir gehen zusätzlich sicher:
             validate_email_unique(v)
             if User.objects.filter(email__iexact=v).exists():
-                # Falls dein Helper "E-Mail" als Key liefert, normalisieren wir hier:
                 raise serializers.ValidationError("E-Mail-Adresse wird bereits verwendet.")
         except DRFValidationError as e:
-            # e.detail kann dict/list/string sein – wir mappen auf Feldfehler "email"
+            # e.detail can be dict/list/string
             if isinstance(e.detail, dict):
                 msg = e.detail.get("email") or e.detail.get("E-Mail") or "Ungültige E-Mail-Adresse."
             else:
@@ -42,7 +41,7 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
         return v
 
-    # Passwortstärke über deinen Helper (läuft als Field-Validator für "password")
+    # validates password strength
     def validate_password(self, v):
         try:
             validate_password_strength(v)
@@ -54,7 +53,7 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
         return v
 
-    # Cross-field: Passwortgleichheit
+    # checks equal passwords
     def validate(self, attrs):
         if attrs["password"] != attrs["repeated_password"]:
             raise serializers.ValidationError({"repeated_password": "Passwörter stimmen nicht überein."})
@@ -73,6 +72,7 @@ class RegistrationSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
+    """Serializes login data"""
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
