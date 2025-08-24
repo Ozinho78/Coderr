@@ -1,6 +1,6 @@
 # Backend Project for Kanban-App with Django REST Framework (DRF)
 
-This project is the backend for a Kanban-App, built with Django and Django REST Framework (DRF).
+This project is the backend for a Freelancer-Platform-App, built with Django and Django REST Framework (DRF).
 It offers endpoints for creating, reading, updating and deleting (CRUD) boards, lists, cards and comments.
 
 -------------------------------------------------------------------------------------------------------------

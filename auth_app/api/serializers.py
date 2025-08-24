@@ -1,3 +1,4 @@
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -7,6 +8,7 @@ from core.utils.validators import (
     validate_email_unique,
     validate_password_strength,
 )
+
 
 
 class RegistrationSerializer(serializers.Serializer):
@@ -68,3 +70,22 @@ class RegistrationSerializer(serializers.Serializer):
         )
         Profile.objects.create(user=user, type=validated_data["type"])
         return user
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        username = attrs.get("username")
+        password = attrs.get("password")
+        if not username or not password:
+            raise serializers.ValidationError("Ungültige Anfragedaten.")
+        user = authenticate(username=username, password=password)
+        if not user:
+            # absichtlich generisch (kein Leak, ob User existiert)
+            raise serializers.ValidationError("Ungültige Anmeldedaten.")
+        if not user.is_active:
+            raise serializers.ValidationError("Konto ist deaktiviert.")
+        attrs["user"] = user
+        return attrs

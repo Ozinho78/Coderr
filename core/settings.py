@@ -48,6 +48,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'EXCEPTION_HANDLER': 'core.utils.exceptions.exception_handler_status500',   # customized exceptions handling
 }
 
 MIDDLEWARE = [
