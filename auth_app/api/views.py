@@ -10,7 +10,7 @@ class RegistrationView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    @transaction.atomic
+    @transaction.atomic   # for bundling all DB actions in case of error during registration process
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
         if not serializer.is_valid():
