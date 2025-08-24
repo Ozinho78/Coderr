@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os  # für Pfadfunktionen
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'auth_app',
+    'auth_app.apps.AuthAppConfig',  # nutzt die AppConfig mit ready() -> lädt signals
     'coderr_app',
 ]
 
@@ -132,3 +134,10 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Ordner, in dem Uploads gespeichert werden (lokal)
+MEDIA_ROOT = BASE_DIR / 'media'   # ergibt <projekt>/media
+
+# URL-Präfix, unter dem Uploads erreichbar sind
+MEDIA_URL = '/media/'
+

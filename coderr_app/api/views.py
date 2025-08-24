@@ -1,49 +1,47 @@
-from rest_framework.generics import RetrieveUpdateAPIView  # GenericView für GET + PATCH
+from rest_framework.generics import RetrieveUpdateAPIView  # DRF-Generic für GET+PATCH
 from rest_framework.permissions import IsAuthenticated  # Auth-Pflicht
-from rest_framework.response import Response  # für eventuelle Custom-Responses
-from rest_framework import status  # HTTP-Statuscodes
+from rest_framework.response import Response  # HTTP-Antwort
+from rest_framework import status  # Statuscodes
 from django.shortcuts import get_object_or_404  # 404-Helfer
-from auth_app.models import Profile
-from coderr_app.api.serializers import ProfileDetailSerializer  # der oben definierte Serializer
-
+from auth_app.models import Profile  # Profilmodell importieren
+from .serializers import ProfileDetailSerializer  # Serializer von oben
 
 class ProfileDetailView(RetrieveUpdateAPIView):
-    # setzt den Serializer für Ein-/Ausgabe
+    # Serializer konfigurieren
     serializer_class = ProfileDetailSerializer
-    # Permission: nur authentifizierte Nutzer dürfen zugreifen
+    # nur eingeloggte User dürfen zugreifen
     permission_classes = [IsAuthenticated]
-    # wir verwenden einen Queryset, damit die GenericView das Objekt laden kann
+    # Queryset, inkl. user für effiziente JOINs
     queryset = Profile.objects.select_related('user').all()
-    # Lookup-Feld entspricht {pk} in der URL
+    # {pk} aus der URL
     lookup_field = 'pk'
 
     def get(self, request, *args, **kwargs):
-        # GET: liefert Detaildaten eines Profils
+        # GET liefert Profildetails
         try:
-            # lädt das Profil anhand der pk (404, wenn nicht vorhanden)
+            # Profil anhand pk finden (404 bei Nichtfinden)
             profile = get_object_or_404(self.get_queryset(), pk=kwargs.get(self.lookup_field))
-            # serialisiert das Profil
+            # serialisieren
             serializer = self.get_serializer(profile)
-            # gibt 200 OK + Daten zurück
+            # 200 OK mit Daten
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as exc:
-            # Fängt unerwartete Fehler ab -> 500
+        except Exception:
+            # Unerwarteter Fehler → 500
             return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def patch(self, request, *args, **kwargs):
-        # PATCH: partielles Update (Bearbeiten der Profildaten)
+        # PATCH erlaubt partielles Update
         try:
-            # lädt das Zielprofil (404 bei Nichtfinden)
+            # Zielprofil laden
             profile = get_object_or_404(self.get_queryset(), pk=kwargs.get(self.lookup_field))
-            # partielles Update erlauben
+            # Serializer mit partial=True
             serializer = self.get_serializer(profile, data=request.data, partial=True)
-            # validiert die Eingabe
+            # validieren (wirft 400 bei Fehlern)
             serializer.is_valid(raise_exception=True)
-            # speichert Änderungen (inkl. User-Feldern via update())
+            # speichern (inkl. User-Felder)
             serializer.save()
-            # gibt die aktualisierten Daten mit 200 zurück
+            # aktualisierte Daten zurück
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as exc:
-            # Wenn der Fehler ein Validierungsfehler ist, überlässt .is_valid() das DRF-Handling (400)
-            # Hier allgemeiner Fallback -> 500
+        except Exception:
+            # Fallback 500 (ValidationError handled DRF-üblich mit 400)
             return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
