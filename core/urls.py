@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('auth_app.api.urls')),
     path('api/', include('coderr_app.api.urls')),
+    path('api-auth/', include('rest_framework.urls')), # ← Login/Logout für die Browsable API
 ]
 
 # Nur im Debug: Medien ausliefern (dev server)
