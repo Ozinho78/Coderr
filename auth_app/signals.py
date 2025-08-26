@@ -5,7 +5,7 @@ from auth_app.models import Profile                                 # dein Profi
 
 # Faker für fallback-Namen
 try:
-    from faker import Faker
+    from faker import Faker # type: ignore
 except ImportError:
     Faker = None                                                    # falls nicht installiert, skip Fakes
 
