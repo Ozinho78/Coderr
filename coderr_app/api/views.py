@@ -16,7 +16,10 @@ class ProfileDetailView(RetrieveUpdateAPIView):
     # Queryset, inkl. user für effiziente JOINs
     queryset = Profile.objects.select_related('user').all()
     # {pk} aus der URL
-    lookup_field = 'pk' # URL-Param: /api/profile/<pk>/
+    # lookup_field = 'pk' # URL-Param: /api/profile/<pk>/
+    # WICHTIG: {pk} aus der URL soll auf profile.user_id matchen:
+    lookup_field = 'user_id'        # Feld am Modell (implizit vorhanden durch FK)
+    lookup_url_kwarg = 'pk'         # Name des URL-Params bleibt {pk}
     
     # Hinweis: Wir überschreiben KEINE Methoden.
     # DRF ruft bei PATCH intern get_object() → check_object_permissions() auf.

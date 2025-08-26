@@ -1,8 +1,9 @@
 # ---- Imports & Setup ---------------------------------------------------------
-
+import re
 import pytest  # pytest für Tests
 from django.urls import reverse, NoReverseMatch  # URL-Auflösung per Namen
 from django.contrib.auth import get_user_model  # generisch für das Usermodell
+from django.db import transaction                      # für atomare get_or_create-Operation
 from rest_framework.test import APIClient  # DRF-Testclient
 from django.core.files.uploadedfile import SimpleUploadedFile  # Fake-Datei für file-Feld
 from auth_app.models import Profile  # dein Profilmodell
@@ -22,29 +23,78 @@ def build_profile_url(pk: int) -> str:
 
 
 def create_user(username='max_mustermann', email='old_email@business.de'):
-    # erzeugt einen einfachen User für die Tests
+    # User wird erstellt; ein Profil kann durch Signals automatisch entstehen
+    # first_name/last_name leer, damit PATCH sie setzt
     return User.objects.create(username=username, email=email, first_name='', last_name='')
+    # return User.objects.create(username=username, email=email, first_name='', last_name='')
 
 
 def create_profile(user, type_='business', with_file=True):
-    # optional eine Fake-Bilddatei erzeugen, damit 'file' im Serializer einen Dateinamen liefert
-    uploaded = None  # Standard: keine Datei
-    if with_file:
-        uploaded = SimpleUploadedFile(  # kleine Dummy-Datei mit Bild-Mime
-            name='profile_picture.jpg',
-            content=b'\x47\x49\x46',  # ein paar Bytes
-            content_type='image/jpeg',
+    # Falls ein Profil durch Signals schon existiert, nicht erneut anlegen → get_or_create
+    with transaction.atomic():
+        profile, created = Profile.objects.get_or_create(
+            user=user,                                  # OneToOne – Schlüssel
+            defaults={                                  # Defaults wenn neu
+                'location': '',
+                'tel': '',
+                'description': '',
+                'working_hours': '',
+                'type': type_,
+            },
         )
-    # Profilmodell anlegen; übrige Felder leer lassen (werden im Test gepatcht)
-    return Profile.objects.create(
-        user=user,
-        file=uploaded,
-        location='',
-        tel='',
-        description='',
-        working_hours='',
-        type=type_,  # z. B. 'business'
-    )
+
+    # Wenn das Profil schon existierte, sorgen wir dafür, dass unsere Test-Annahmen stimmen:
+    # - type setzen (falls im Projekt kein default) 
+    # - optional eine Datei anhängen, damit Serializer 'file' → 'profile_picture.jpg' liefert
+    updated = False
+
+    if profile.type != type_:
+        profile.type = type_
+        updated = True
+
+    if with_file:
+        # Nur setzen, wenn noch keine Datei vorhanden
+        if not getattr(profile, 'file', None):
+            profile.file = SimpleUploadedFile(
+                name='profile_picture.jpg',
+                content=b'\x47\x49\x46',               # ein paar Bytes reichen für den Test
+                content_type='image/jpeg',
+            )
+            updated = True
+
+    # sicherstellen, dass Textfelder nicht None sind (Serializer ersetzt None → '')
+    for f in ['location', 'tel', 'description', 'working_hours']:
+        if getattr(profile, f, None) is None:
+            setattr(profile, f, '')
+            updated = True
+
+    if updated:
+        profile.save()
+
+    return profile
+
+
+
+
+# def create_profile(user, type_='business', with_file=True):
+#     # optional eine Fake-Bilddatei erzeugen, damit 'file' im Serializer einen Dateinamen liefert
+#     uploaded = None  # Standard: keine Datei
+#     if with_file:
+#         uploaded = SimpleUploadedFile(  # kleine Dummy-Datei mit Bild-Mime
+#             name='profile_picture.jpg',
+#             content=b'\x47\x49\x46',  # ein paar Bytes
+#             content_type='image/jpeg',
+#         )
+#     # Profilmodell anlegen; übrige Felder leer lassen (werden im Test gepatcht)
+#     return Profile.objects.create(
+#         user=user,
+#         file=uploaded,
+#         location='',
+#         tel='',
+#         description='',
+#         working_hours='',
+#         type=type_,  # z. B. 'business'
+#     )
 
 
 # ---- Fixtures ----------------------------------------------------------------
@@ -116,7 +166,10 @@ def test_patch_own_profile_returns_200(api_client, owner_user, owner_profile):
     assert data['email'] == 'new_email@business.de'  # E-Mail im verknüpften User aktualisiert
 
     # 'file' sollte der Basisname der hochgeladenen Datei sein
-    assert data['file'] == 'profile_picture.jpg'
+    # assert data['file'] == 'profile_picture.jpg'
+    # robust gegen Suffixe wie '_luSpwwK'
+    # assert re.fullmatch(r'profile_picture.*\.jpg', data['file']) is not None
+    assert data['file'].startswith('profile_picture') and data['file'].endswith('.jpg') # ohne re
 
     # 'created_at' sollte vorhanden und ein String sein (konkrete Zeit hängt vom DB-Autowert ab)
     assert isinstance(data['created_at'], str) and data['created_at'] != ''
