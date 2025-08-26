@@ -1,20 +1,27 @@
+from django.shortcuts import get_object_or_404  # 404-Helfer
 from rest_framework.generics import RetrieveUpdateAPIView  # DRF-Generic für GET+PATCH
-from rest_framework.permissions import IsAuthenticated  # Auth-Pflicht
+from rest_framework.permissions import IsAuthenticatedOrReadOnly  # Auth-Pflicht
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework import status  # Statuscodes
-from django.shortcuts import get_object_or_404  # 404-Helfer
+from core.utils.permissions import IsOwnerOrReadOnly
 from auth_app.models import Profile  # Profilmodell importieren
-from .serializers import ProfileDetailSerializer  # Serializer von oben
+from coderr_app.api.serializers import ProfileDetailSerializer
+
 
 class ProfileDetailView(RetrieveUpdateAPIView):
     # Serializer konfigurieren, definiert Serializer
     serializer_class = ProfileDetailSerializer
     # nur eingeloggte User dürfen zugreifen
-    permission_classes = [IsAuthenticated] # 401 wenn anonym
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]   # Read: offen, Write: auth + owner
     # Queryset, inkl. user für effiziente JOINs
     queryset = Profile.objects.select_related('user').all()
     # {pk} aus der URL
     lookup_field = 'pk' # URL-Param: /api/profile/<pk>/
+    
+    # Hinweis: Wir überschreiben KEINE Methoden.
+    # DRF ruft bei PATCH intern get_object() → check_object_permissions() auf.
+    # IsAuthenticatedOrReadOnly blockt Unauth-Write (→ 401),
+    # IsOwnerOrReadOnly blockt Fremd-Write (→ 403).
 
     # def get(self, request, *args, **kwargs):
     #     # GET liefert Profildetails
