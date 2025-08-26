@@ -52,31 +52,32 @@ def create_profile_for_user(sender, instance, created, **kwargs):
     if not created:
         return
 
-    # Profil sicherstellen (wie bisher): Default customer
+    # Profil sicherstellen – minimal, ohne weitere Felder zu befüllen
     if not hasattr(instance, 'profile'):
         Profile.objects.create(user=instance, type='customer')      # Default-Typ setzen                 # :contentReference[oaicite:4]{index=4}
 
+    # --- Ab hier deaktivieren, damit bei Registrierung nichts automatisch ergänzt wird ---
     # --- NEU: fehlende Namen freundlich füllen (einmalig) ---
-    fn = (instance.first_name or '').strip()
-    ln = (instance.last_name or '').strip()
-    if not fn or not ln:
-        # 1) Versuch: aus E-Mail/Username ableiten
-        guess_fn, guess_ln = _guess_names_from_identity(instance.username or '', instance.email or '')
-        # 2) Fallback: Faker (Locale anhand Domain)
-        if (not guess_fn or not guess_ln) and Faker:
-            f = _faker_by_email(instance.email)
-            if f:
-                if not guess_fn:
-                    guess_fn = f.first_name()
-                if not guess_ln:
-                    guess_ln = f.last_name()
-        # final setzen, wenn etwas bestimmt werden konnte
-        changed = False
-        if not fn and guess_fn:
-            instance.first_name = guess_fn
-            changed = True
-        if not ln and guess_ln:
-            instance.last_name = guess_ln
-            changed = True
-        if changed:
-            instance.save(update_fields=['first_name', 'last_name'])
+    # fn = (instance.first_name or '').strip()
+    # ln = (instance.last_name or '').strip()
+    # if not fn or not ln:
+    #     # 1) Versuch: aus E-Mail/Username ableiten
+    #     guess_fn, guess_ln = _guess_names_from_identity(instance.username or '', instance.email or '')
+    #     # 2) Fallback: Faker (Locale anhand Domain)
+    #     if (not guess_fn or not guess_ln) and Faker:
+    #         f = _faker_by_email(instance.email)
+    #         if f:
+    #             if not guess_fn:
+    #                 guess_fn = f.first_name()
+    #             if not guess_ln:
+    #                 guess_ln = f.last_name()
+    #     # final setzen, wenn etwas bestimmt werden konnte
+    #     changed = False
+    #     if not fn and guess_fn:
+    #         instance.first_name = guess_fn
+    #         changed = True
+    #     if not ln and guess_ln:
+    #         instance.last_name = guess_ln
+    #         changed = True
+    #     if changed:
+    #         instance.save(update_fields=['first_name', 'last_name'])

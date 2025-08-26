@@ -60,16 +60,27 @@ class RegistrationSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
-        pwd = validated_data.pop("password")
-        validated_data.pop("repeated_password")
+        pwd = validated_data.pop('password')                 # Passwort entnehmen
+        validated_data.pop('repeated_password')              # Wiederholung entfernen
+        desired_type = validated_data['type']                # gewünschter Profil-Typ merken
+
+        # User anlegen (triggert post_save → Signal kann bereits ein Profil erzeugen)
         user = User.objects.create_user(
-            username=validated_data["username"],
-            email=validated_data["email"],
+            username=validated_data['username'],
+            email=validated_data['email'],
             password=pwd,
         )
-        Profile.objects.create(user=user, type=validated_data["type"])
-        return user
 
+        # Profil sicherstellen, ohne Unique-Fehler zu riskieren:
+        profile, _ = Profile.objects.get_or_create(user=user)
+
+        # Typ auf gewünschten Wert setzen (alle anderen Felder bleiben leer)
+        if profile.type != desired_type:
+            profile.type = desired_type
+            profile.save(update_fields=['type'])
+
+        return user
+    
 
 class LoginSerializer(serializers.Serializer):
     """Serializes login data"""
