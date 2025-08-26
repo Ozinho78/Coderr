@@ -5,8 +5,7 @@ from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework import status  # Statuscodes
 from core.utils.permissions import IsOwnerOrReadOnly
 from auth_app.models import Profile  # Profilmodell importieren
-from coderr_app.api.serializers import ProfileDetailSerializer
-from .serializers import ProfileListSerializer
+from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
