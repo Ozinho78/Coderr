@@ -88,3 +88,7 @@ local_settings.py
 .env
 db.sqlite3
 up.bat
+
+db_fill.py
+db_cleanup.py
+backfill_names.py
