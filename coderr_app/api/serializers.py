@@ -87,3 +87,48 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
 
         instance.save()  # Profil speichern
         return instance  # aktualisiertes Objekt zurückgeben
+
+
+class ProfileListSerializer(serializers.ModelSerializer):   # List-Ansicht: reduzierte Felder
+    user = serializers.PrimaryKeyRelatedField(read_only=True)          # zeigt die User-ID
+    username = serializers.SerializerMethodField()                     # aus user.username
+    first_name = serializers.CharField(source='user.first_name', required=False, allow_blank=True)  # nie null im Response
+    last_name = serializers.CharField(source='user.last_name', required=False, allow_blank=True)    # nie null im Response
+    file = serializers.SerializerMethodField()                          # nur Dateiname, kein URL
+
+    class Meta:
+        model = Profile
+        fields = (
+            'user', 'username', 'first_name', 'last_name', 'file',
+            'location', 'tel', 'description', 'working_hours',
+            'type',
+        )                                                               # genau die Felder aus der Vorgabe
+
+        # Alle optionalen Textfelder beim PATCH irrelevant – hier nur GET, aber so sind sie definiert
+        extra_kwargs = {
+            'location': {'required': False, 'allow_blank': True},
+            'tel': {'required': False, 'allow_blank': True},
+            'description': {'required': False, 'allow_blank': True},
+            'working_hours': {'required': False, 'allow_blank': True},
+        }
+
+    def get_username(self, obj):
+        return obj.user.username if getattr(obj, 'user', None) else ''  # '' falls kein User gesetzt (Sicherheitsnetz)
+
+    def get_file(self, obj):
+        if not obj.file:
+            return ''                                                   # kein Bild → leerer String
+        try:
+            return os.path.basename(obj.file.name)                      # nur der Dateiname
+        except Exception:
+            return str(obj.file) or ''                                  # Fallback
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)                       # Standardrepräsentation
+        # Diese Felder dürfen im Response NICHT null sein → zu '' wandeln
+        for key in ['first_name', 'last_name', 'location', 'tel', 'description', 'working_hours']:
+            if data.get(key) is None:
+                data[key] = ''
+        return data
+    
+    

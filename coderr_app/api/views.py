@@ -1,11 +1,12 @@
 from django.shortcuts import get_object_or_404  # 404-Helfer
-from rest_framework.generics import RetrieveUpdateAPIView  # DRF-Generic für GET+PATCH
-from rest_framework.permissions import IsAuthenticatedOrReadOnly  # Auth-Pflicht
+from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView  # DRF-Generic für Listen, GET+PATCH
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly  # Auth-Pflicht
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework import status  # Statuscodes
 from core.utils.permissions import IsOwnerOrReadOnly
 from auth_app.models import Profile  # Profilmodell importieren
 from coderr_app.api.serializers import ProfileDetailSerializer
+from .serializers import ProfileListSerializer
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
@@ -60,3 +61,14 @@ class ProfileDetailView(RetrieveUpdateAPIView):
     #     except Exception:
     #         return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # 500 Fallback
 
+
+class BusinessProfileListView(ListAPIView):                         # GET /api/profiles/business/
+    serializer_class = ProfileListSerializer                        # Ausgabeformat
+    permission_classes = [IsAuthenticated]                          # 401 wenn nicht eingeloggt
+    queryset = Profile.objects.select_related('user').filter(type='business')  # nur Business-Profile, effizient mit JOIN
+
+
+class CustomerProfileListView(ListAPIView):                         # GET /api/profiles/customer/
+    serializer_class = ProfileListSerializer                        # selbes Ausgabeformat
+    permission_classes = [IsAuthenticated]                          # 401 wenn nicht eingeloggt
+    queryset = Profile.objects.select_related('user').filter(type='customer')  # nur Customer-Profile
