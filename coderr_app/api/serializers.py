@@ -9,7 +9,9 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
     # Felder aus dem User zusammensetzen
     user = serializers.PrimaryKeyRelatedField(read_only=True)  # User-ID schreibgeschützt
     username = serializers.SerializerMethodField()  # Username aus user
-    email = serializers.SerializerMethodField()  # Email aus user
+
+    # >>> NEU: email schreibbar machen (kommt aus user.email)
+    email = serializers.EmailField(source='user.email', required=False)  # PATCH erlaubt
 
     # first_name/last_name kommen aus user.*, sind PATCH-bar
     first_name = serializers.CharField(source='user.first_name', required=False, allow_blank=True)  # mapping auf user
@@ -35,17 +37,11 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
         }
 
     # ---------- Getter aus User ----------
-
     def get_username(self, obj):
         # Username aus verknüpftem User oder ''
         return obj.user.username if getattr(obj, 'user', None) and obj.user.username else ''
 
-    def get_email(self, obj):
-        # E-Mail aus verknüpftem User oder ''
-        return obj.user.email if getattr(obj, 'user', None) and obj.user.email else ''
-
     # ---------- file (nur Dateiname) ----------
-
     def get_file(self, obj):
         # Wenn kein Bild gesetzt ist -> ''
         if not obj.file:
@@ -58,7 +54,6 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
             return str(obj.file) or ''
 
     # ---------- Null-zu-Leerstring ----------
-
     def to_representation(self, instance):
         # Standard-Serialisierung abrufen
         data = super().to_representation(instance)
@@ -71,9 +66,8 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
         return data
 
     # ---------- PATCH: User- + Profilfelder speichern ----------
-
     def update(self, instance, validated_data):
-        # 'user' kann wegen source='user.first_name' im validated_data liegen
+        # 'user' kann wegen source='user.first_name' / 'user.email' im validated_data liegen
         user_data = validated_data.pop('user', {}) if 'user' in validated_data else {}
 
         # Profilfelder selektiv übernehmen
@@ -81,12 +75,14 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
             if field in validated_data:
                 setattr(instance, field, validated_data[field])
 
-        # Userfelder (first_name/last_name) übernehmen
+        # Userfelder (first_name/last_name/email) übernehmen
         if user_data:
             if 'first_name' in user_data:
                 instance.user.first_name = user_data['first_name'] or ''
             if 'last_name' in user_data:
                 instance.user.last_name = user_data['last_name'] or ''
+            if 'email' in user_data:
+                instance.user.email = user_data['email']  # EmailField validiert bereits
             instance.user.save()  # User speichern
 
         instance.save()  # Profil speichern
