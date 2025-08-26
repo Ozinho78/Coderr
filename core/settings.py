@@ -10,11 +10,15 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
+from pathlib import Path # Pfad-Objekte statt Strings
 import os  # für Pfadfunktionen
+import logging # Python-Logging
+from logging.handlers import RotatingFileHandler
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent      # dein vorhandenes BASE_DIR (→ Projekt-Root)
+LOG_DIR = BASE_DIR / 'logs'                            # logs/ direkt im Projekt-Root
+LOG_DIR.mkdir(exist_ok=True)                           # Ordner anlegen, falls nicht vorhanden
 
 
 # Quick-start development settings - unsuitable for production
@@ -141,3 +145,43 @@ MEDIA_ROOT = BASE_DIR / 'media'   # ergibt <projekt>/media
 # URL-Präfix, unter dem Uploads erreichbar sind
 MEDIA_URL = '/media/'
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,                 # bestehende Logger nicht abschalten
+    'formatters': {
+        'verbose': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'app_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'django.log'),  # → <projekt-root>/logs/django.log
+            'maxBytes': 5 * 1024 * 1024,              # 5 MB pro Datei
+            'backupCount': 5,                          # bis zu 5 Rotationen
+            'encoding': 'utf-8',
+            'formatter': 'verbose',
+        },
+        'request_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'requests.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 3,
+            'encoding': 'utf-8',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        # alle App-Logs (root)
+        '': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': False},
+        # Django-Core
+        'django': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': True},
+        'django.request': {'handlers': ['request_file'], 'level': 'INFO', 'propagate': False},
+        'django.db.backends': {'handlers': ['app_file'], 'level': 'WARNING', 'propagate': False},
+        # optional: DRF
+        'rest_framework': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': False},
+    }
+}

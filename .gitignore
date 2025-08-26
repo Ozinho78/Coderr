@@ -89,6 +89,13 @@ local_settings.py
 db.sqlite3
 up.bat
 
+# DB Operations
 db_fill.py
 db_cleanup.py
 backfill_names.py
+
+# Logs
+log/*
+logs/*
+!logs/.gitkeep
+.pytest_cache/
