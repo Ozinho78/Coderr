@@ -93,6 +93,7 @@ up.bat
 db_fill.py
 db_cleanup.py
 backfill_names.py
+shell_script.py
 
 # Logs
 log/*
