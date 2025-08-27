@@ -2,6 +2,7 @@ from rest_framework import serializers  # DRF-Serializer-Basis
 from django.contrib.auth import get_user_model  # kompatibel auch für CustomUser
 from auth_app.models import Profile  # unser Profilmodell (aus auth_app)
 import os  # für Dateinamen von file
+from coderr_app.models import Offer, OfferDetail  # unsere neuen Modelle
 
 User = get_user_model()  # Referenz auf das Usermodell
 
@@ -132,3 +133,44 @@ class ProfileListSerializer(serializers.ModelSerializer):   # List-Ansicht: redu
         return data
     
     
+class OfferDetailMiniSerializer(serializers.ModelSerializer):
+    # schlanke Darstellung für die Offer-Liste (id + url)
+    url = serializers.SerializerMethodField()  # baut eine relative URL wie '/offerdetails/1/'
+
+    class Meta:
+        model = OfferDetail  # Basis
+        fields = ('id', 'url')  # nur id + url
+
+    def get_url(self, obj):
+        # einfache relative URL wie im Beispiel gefordert
+        return f'/offerdetails/{obj.pk}/'  # Hinweis: kein DRF reverse, exakt wie Beispiel
+
+class OfferListSerializer(serializers.ModelSerializer):
+    # Detail-IDs + URLs
+    details = OfferDetailMiniSerializer(many=True, read_only=True)  # nutzt related_name='details'
+
+    # Aggregierte Felder (per Queryset-Annotation geliefert)
+    min_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)  # minimaler Preis
+    min_delivery_time = serializers.IntegerField(read_only=True)  # minimaler Tagewert
+
+    # Nutzerinfo kompakt
+    user_details = serializers.SerializerMethodField()  # liefert first_name/last_name/username
+
+    class Meta:
+        model = Offer  # Basis ist Offer
+        fields = (
+            'id', 'user', 'title', 'image', 'description',
+            'created_at', 'updated_at',
+            'details',
+            'min_price', 'min_delivery_time',
+            'user_details',
+        )  # exakt gemäß Response
+
+    def get_user_details(self, obj):
+        # liest Daten aus obj.user; leere Strings, falls nicht belegt
+        u = getattr(obj, 'user', None)
+        return {
+            'first_name': (u.first_name or '') if u else '',
+            'last_name': (u.last_name or '') if u else '',
+            'username': (u.username or '') if u else '',
+        }

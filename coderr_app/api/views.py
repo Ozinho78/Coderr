@@ -1,11 +1,17 @@
 from django.shortcuts import get_object_or_404  # 404-Helfer
+from django.db.models import Min, Q  # Aggregation + Suche
 from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView  # DRF-Generic für Listen, GET+PATCH
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly  # Auth-Pflicht
+from rest_framework.permissions import AllowAny  # keine Auth nötig
+from rest_framework.exceptions import ValidationError  # für 400-Fehler
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework import status  # Statuscodes
 from core.utils.permissions import IsOwnerOrReadOnly
 from auth_app.models import Profile  # Profilmodell importieren
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
+from coderr_app.models import Offer  # unser Modell
+from coderr_app.api.serializers import OfferListSerializer  # Ausgabeformat
+from coderr_app.api.pagination import OfferPageNumberPagination  # PageNumberPagination
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
@@ -71,3 +77,77 @@ class CustomerProfileListView(ListAPIView):                         # GET /api/p
     serializer_class = ProfileListSerializer                        # selbes Ausgabeformat
     permission_classes = [IsAuthenticated]                          # 401 wenn nicht eingeloggt
     queryset = Profile.objects.select_related('user').filter(type='customer')  # nur Customer-Profile
+    
+    
+class OfferListView(ListAPIView):
+    # Serializer festlegen
+    serializer_class = OfferListSerializer  # nutzt aggregierte Felder + nested details
+
+    # keine Berechtigungen notwendig
+    permission_classes = [AllowAny]  # öffentlich
+
+    # Pagination aktivieren
+    pagination_class = OfferPageNumberPagination  # PageNumberPagination mit page_size-Param
+
+    def get_queryset(self):
+        # Basis-Query: Offer + nur benötigte Joins laden
+        qs = (
+            Offer.objects
+            .select_related('user')  # Userdaten effizient mitziehen
+            .prefetch_related('details')  # Detailzeilen vorladen
+            # Aggregationen anhängen (min Preis, min Lieferzeit über OfferDetail)
+            .annotate(
+                min_price=Min('details__price'),  # minimaler Preis
+                min_delivery_time=Min('details__delivery_time'),  # minimaler Tagewert
+            )
+        )
+
+        # --- Query-Parameter auslesen ---
+        params = self.request.query_params  # shortcut
+
+        # 1) Filter: creator_id (user_id)
+        creator_id = params.get('creator_id')
+        if creator_id:
+            # nur Zahlen erlauben
+            if not str(creator_id).isdigit():
+                raise ValidationError({'creator_id': 'Muss eine ganze Zahl sein.'})
+            qs = qs.filter(user_id=int(creator_id))  # nach Ersteller filtern
+
+        # 2) Filter: min_price (>=)
+        min_price = params.get('min_price')
+        if min_price:
+            try:
+                # Kommazahl parsen
+                min_price_val = float(min_price)
+            except ValueError:
+                raise ValidationError({'min_price': 'Muss eine Zahl sein.'})
+            # auf Annotation filtern (nur Angebote mit min_price >= angegeben)
+            qs = qs.filter(min_price__gte=min_price_val)
+
+        # 3) Filter: max_delivery_time (<=)
+        max_delivery_time = params.get('max_delivery_time')
+        if max_delivery_time:
+            if not str(max_delivery_time).isdigit():
+                raise ValidationError({'max_delivery_time': 'Muss eine ganze Zahl (Tage) sein.'})
+            qs = qs.filter(min_delivery_time__lte=int(max_delivery_time))
+
+        # 4) Suche: search über title + description (icontains)
+        search = params.get('search')
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search))
+
+        # 5) Sortierung: ordering ∈ {'updated_at', '-updated_at', 'min_price', '-min_price'}
+        ordering = params.get('ordering')
+        if ordering:
+            allowed = {'updated_at', '-updated_at', 'min_price', '-min_price'}
+            if ordering not in allowed:
+                # harte 400 laut Spezifikation
+                raise ValidationError({'ordering': 'Ungültiger Wert. Erlaubt: updated_at, -updated_at, min_price, -min_price'})
+            qs = qs.order_by(ordering)
+        else:
+            # sinnvolle Default-Sortierung: neueste zuerst
+            qs = qs.order_by('-updated_at')
+
+        # fertig annotiertes + gefiltertes Queryset zurückgeben
+        return qs
+    
