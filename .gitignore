@@ -101,3 +101,8 @@ log/*
 logs/*
 !logs/.gitkeep
 .pytest_cache/
+
+# DB
+db_backup.bat
+dump_coderr.json
+dump_users.json
