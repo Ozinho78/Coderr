@@ -174,3 +174,84 @@ class OfferListSerializer(serializers.ModelSerializer):
             'last_name': (u.last_name or '') if u else '',
             'username': (u.username or '') if u else '',
         }
+        
+        
+# ------------------------------------------------------------
+# <<< NEW: Serializer für ein einzelnes Detail im POST-Body
+# ------------------------------------------------------------
+class OfferDetailCreateSerializer(serializers.ModelSerializer):  # <<< NEW
+    class Meta:
+        model = OfferDetail
+        fields = (
+            'id',                      # Antwort enthält die erzeugte ID
+            'title',                   # Titel des Pakets (Basic/Standard/Premium)
+            'revisions',               # Anzahl der Revisionen
+            'delivery_time_in_days',   # Lieferzeit in Tagen
+            'price',                   # Preis
+            'features',                # Liste von Strings
+            'offer_type',              # 'basic' | 'standard' | 'premium'
+        )
+
+    def validate_features(self, value):  # kurze Typprüfung  # <<< NEW
+        if value is None:
+            return []
+        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            raise serializers.ValidationError('features muss eine Liste aus Strings sein.')
+        return value
+
+    def validate(self, attrs):  # Werte-Checks  # <<< NEW
+        if attrs.get('price') is None or float(attrs['price']) < 0:
+            raise serializers.ValidationError({'price': 'Preis muss >= 0 sein.'})
+        if attrs.get('delivery_time_in_days') in (None, ''):
+            raise serializers.ValidationError({'delivery_time_in_days': 'Pflichtfeld.'})
+        if attrs.get('offer_type') not in ('basic', 'standard', 'premium'):
+            raise serializers.ValidationError({'offer_type': 'Ungültig (basic|standard|premium).'})
+        return attrs
+
+
+# ------------------------------------------------------------
+# <<< NEW: Serializer für das gesamte Offer (inkl. 3 Details)
+# ------------------------------------------------------------
+class OfferCreateSerializer(serializers.ModelSerializer):  # <<< NEW
+    details = OfferDetailCreateSerializer(many=True)  # genau 3 Details erwartet
+
+    class Meta:
+        model = Offer
+        fields = ('id', 'title', 'image', 'description', 'details')
+
+    def validate_details(self, value):  # genau 3 und je 1x basic/standard/premium  # <<< NEW
+        if not isinstance(value, list) or len(value) != 3:
+            raise serializers.ValidationError('Ein Offer muss genau 3 Details enthalten.')
+        types = [d.get('offer_type') for d in value]
+        if set(types) != {'basic', 'standard', 'premium'}:
+            raise serializers.ValidationError('Die 3 Details müssen basic, standard und premium enthalten (jeweils einmal).')
+        return value
+
+    def create(self, validated_data):  # Offer + Details in einem Rutsch  # <<< NEW
+        request = self.context.get('request')  # User aus Request
+        user = getattr(request, 'user', None)
+        details_data = validated_data.pop('details')  # Details abtrennen
+
+        # Offer erstellen (Creator = eingeloggter User)
+        offer = Offer.objects.create(user=user, **validated_data)
+
+        # 3 Detail-Objekte vorbereiten
+        objs = []
+        for d in details_data:
+            # <<< CHANGE: wir spiegeln delivery_time_in_days -> delivery_time (Legacy-Feld)
+            dt_days = d.get('delivery_time_in_days')
+            objs.append(OfferDetail(
+                offer=offer,
+                title=d.get('title'),
+                revisions=d.get('revisions', 0),
+                delivery_time_in_days=dt_days,
+                delivery_time=dt_days,                # <<< NEW: wichtig für NOT NULL-Schema
+                price=d.get('price'),
+                features=d.get('features', []),
+                offer_type=d.get('offer_type'),
+            ))
+        # effizient speichern
+        OfferDetail.objects.bulk_create(objs)
+        # aktualisieren (IDs/Relationen)
+        offer.refresh_from_db()
+        return offer

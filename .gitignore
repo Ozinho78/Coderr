@@ -94,6 +94,7 @@ db_fill.py
 db_cleanup.py
 backfill_names.py
 shell_script.py
+000X_offer_detail_extend.py
 
 # Logs
 log/*
