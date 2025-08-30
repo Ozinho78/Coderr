@@ -104,5 +104,6 @@ logs/*
 
 # DB
 db_backup.bat
+db_dump.json
 dump_coderr.json
 dump_users.json
