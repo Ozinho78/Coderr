@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404  # 404-Helfer
-from django.db.models import Min, Q, Case, When, F, IntegerField, Avg, Count  # Aggregation + Suche
+from django.shortcuts import get_object_or_404
+from django.db.models import Min, Q, Case, When, F, IntegerField, Avg, Count
 from rest_framework.views import APIView
 from rest_framework.generics import (
     ListAPIView, 
@@ -9,9 +9,9 @@ from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly  # Auth-Pflicht
-from rest_framework.exceptions import ValidationError  # für 400-Fehler
-from rest_framework.response import Response  # HTTP-Antwort
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
