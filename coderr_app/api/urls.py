@@ -13,6 +13,7 @@ from coderr_app.api.views import (
     CompletedOrderCountView,
     ReviewListView,
     ReviewDetailView,
+    BaseInfoView,
 )
 
 
@@ -30,6 +31,7 @@ urlpatterns = [
     path('completed-order-count/<int:business_user_id>/', CompletedOrderCountView.as_view(), name='orders-completed-count'),
     path('reviews/', ReviewListView.as_view(), name='reviews-list'),  # GET (List) + POST (Create)
     path('reviews/<int:pk>/', ReviewDetailView.as_view(), name='reviews-detail'),  # GET (einzeln), PATCH, DELETE
+    path('base-info/', BaseInfoView.as_view(), name='base-info'),  # GET /api/base-info/
 ]
 
 

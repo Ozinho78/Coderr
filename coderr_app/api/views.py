@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404  # 404-Helfer
-from django.db.models import Min, Q, Case, When, F, IntegerField  # Aggregation + Suche
+from django.db.models import Min, Q, Case, When, F, IntegerField, Avg, Count  # Aggregation + Suche
 from rest_framework.views import APIView
 from rest_framework.generics import (
     ListAPIView, 
@@ -587,3 +587,36 @@ class ReviewDetailView(RetrieveUpdateDestroyAPIView):
 
         self.perform_destroy(review)
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+class BaseInfoView(APIView):
+    permission_classes = [AllowAny]  # öffentlich: keine Auth-Pflicht
+
+    def get(self, request):
+        try:
+            # --- Reviews zählen + Durchschnitt berechnen ---
+            agg = Review.objects.aggregate(
+                review_count=Count('id'),   # Anzahl Bewertungen
+                avg_rating=Avg('rating'),   # Durchschnittsrating (kann None sein)
+            )
+            review_count = agg['review_count'] or 0            # None→0 absichern
+            avg_raw = agg['avg_rating'] or 0                   # None→0 absichern
+            average_rating = round(float(avg_raw), 1) if review_count > 0 else 0.0  # eine Dezimalstelle
+
+            # --- Anzahl Business-Profile ---
+            business_profile_count = Profile.objects.filter(type='business').count()
+
+            # --- Anzahl Offers ---
+            offer_count = Offer.objects.count()
+
+            # --- Response nach Vorgabe ---
+            data = {
+                'review_count': review_count,
+                'average_rating': average_rating,
+                'business_profile_count': business_profile_count,
+                'offer_count': offer_count,
+            }
+            return Response(data, status=status.HTTP_200_OK)
+        except Exception:
+            # Fallback laut Vorgabe
+            return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
