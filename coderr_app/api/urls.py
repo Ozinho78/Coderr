@@ -10,6 +10,7 @@ from coderr_app.api.views import (
     OrderListCreateView,
     OrderStatusUpdateView,
     OrderInProgressCountView,
+    CompletedOrderCountView,
 )
 
 
@@ -24,6 +25,7 @@ urlpatterns = [
     path('orders/', OrderListCreateView.as_view(), name='orders-list-create'),  # <<< CHANGE (GET + POST)
     path('orders/<int:pk>/', OrderStatusUpdateView.as_view(), name='orders-status-update'),
     path('order-count/<int:business_user_id>/', OrderInProgressCountView.as_view(), name='orders-in-progress-count'),
+    path('completed-order-count/<int:business_user_id>/', CompletedOrderCountView.as_view(), name='orders-completed-count'),
 ]
 
 
