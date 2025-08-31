@@ -477,3 +477,24 @@ class OrderListSerializer(serializers.ModelSerializer):
 class OrderCreateInputSerializer(serializers.Serializer):
     # akzeptiert genau ein Feld im Body: offer_detail_id
     offer_detail_id = serializers.IntegerField(required=True, min_value=1)  # Pflichtfeld, ganze Zahl >= 1
+    
+
+# Dein Order-Modell enthält die Status-Choices, daran validieren wir.
+# Extra-Schutz: es wird wirklich nur status akzeptiert.    
+class OrderStatusPatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ('status',)  # nur dieses Feld patchbar
+
+    def validate_status(self, value):
+        # Erlaubte Werte direkt aus dem Modell (Choices: pending, in_progress, delivered, completed, cancelled)
+        valid = {choice[0] for choice in Order._meta.get_field('status').choices}  # siehe Modell-Choices :contentReference[oaicite:1]{index=1}
+        if value not in valid:
+            raise serializers.ValidationError('Ungültiger Status.')
+        return value
+
+    def validate(self, attrs):
+        # Sicherheit: nur 'status' zulassen – falls jemand mehr schickt, brettern wir 400 raus
+        if set(attrs.keys()) != {'status'}:
+            raise serializers.ValidationError('Nur das Feld "status" darf aktualisiert werden.')
+        return attrs

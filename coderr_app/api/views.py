@@ -25,6 +25,7 @@ from coderr_app.api.serializers import (
     OfferPatchResponseSerializer, 
     OrderListSerializer,
     OrderCreateInputSerializer,
+    OrderStatusPatchSerializer
 )
 from coderr_app.api.pagination import OfferPageNumberPagination
 
@@ -351,3 +352,41 @@ class OrderListCreateView(ListCreateAPIView):
         # 6) Ausgabe im geforderten Format (nutzt bereits existierenden List-Serializer)
         out = OrderListSerializer(order)                         # gleiche Struktur wie GET-Liste
         return Response(out.data, status=status.HTTP_201_CREATED)
+    
+    
+# Auth + Typ: IsAuthenticated + IsBusinessUser (du hast die Permission schon verdrahtet).
+# Owner-Check: order.business_user_id == request.user.id – nur der Dienstleister der Order darf updaten.
+# Antwort: voller Datensatz via OrderListSerializer, genau wie bei GET /api/orders/.
+# updated_at kommt automatisch aus auto_now.
+class OrderStatusUpdateView(RetrieveUpdateAPIView):
+    # GET (optional) + PATCH auf /api/orders/<pk>/
+    queryset = Order.objects.all()                     # Basis-Query
+    permission_classes = [IsAuthenticated, IsBusinessUser]  # 401/403 wenn kein Business-User
+    lookup_field = 'pk'                                # URL-Parameter 'id' → pk
+
+    def get_serializer_class(self):
+        # Für PATCH: Eingabe-Serializer (nur 'status'); Für GET: Ausgabe-Serializer
+        return OrderStatusPatchSerializer if self.request.method in ('PATCH', 'PUT') else OrderListSerializer
+
+    def update(self, request, *args, **kwargs):
+        # Wir unterstützen nur PATCH (partiell); PUT blocken wir bewusst
+        if request.method == 'PUT':
+            return Response({'detail': 'Nur PATCH ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Ziel-Order laden (404 auto bei Nichtfinden)
+        order = self.get_object()
+
+        # Objektberechtigung: nur der zugehörige Business-Owner dieser Bestellung darf den Status ändern
+        if order.business_user_id != request.user.id:
+            return Response({'detail': 'Nur der Business-Owner dieser Bestellung darf den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Eingabe validieren (nur 'status' erlaubt)
+        serializer = OrderStatusPatchSerializer(order, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        # Speichern löst auto_now bei updated_at aus (siehe Modell) :contentReference[oaicite:5]{index=5}
+        serializer.save()
+
+        # Ausgabe: komplette Order im bekannten Format
+        out = OrderListSerializer(order)
+        return Response(out.data, status=status.HTTP_200_OK)
