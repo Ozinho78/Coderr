@@ -1,134 +1,104 @@
-from django.contrib import admin  # Admin-Registrierung & Basisklassen
-from django.db.models import Min  # Aggregat-Funktion für min()
-from django.utils.html import format_html  # sichere HTML-Ausgabe (Link zum User)
-from coderr_app.models import Offer, OfferDetail, Order, Review  # unsere Modelle
-
+from django.contrib import admin
+from django.db.models import Min
+from django.utils.html import format_html
+from coderr_app.models import Offer, OfferDetail, Order, Review
 
 
 class OfferDetailInline(admin.TabularInline):
-    # Inline-Tabelle für OfferDetail, erscheint im Offer-Detail als "extra Bereich"
-    model = OfferDetail  # referenziertes Modell
-    extra = 0  # keine leeren Zusatzzeilen standardmäßig
-    fields = ('name', 'price', 'delivery_time')  # sichtbare Spalten im Inline
-    readonly_fields = ()  # alle Felder editierbar (kannst du anpassen)
-    show_change_link = True  # Link zur Detailseite des OfferDetail anzeigen
+    """Provides inline table for OfferDetail"""
+    model = OfferDetail
+    extra = 0
+    fields = ('name', 'price', 'delivery_time')
+    readonly_fields = ()
+    show_change_link = True
 
 @admin.register(Offer)
 class OfferAdmin(admin.ModelAdmin):
-    # Darstellung der Offer-Liste & Detailansicht konfigurieren
-
-    # Spalten in der Listenansicht
+    """Configures presentation of offer list and details"""
     list_display = (
-        'id',  # Primärschlüssel
-        'creator_username',  # Username des Erstellers (User)
-        'title',  # Titel des Angebots
-        'get_min_price',  # aggregierter Minimalpreis
-        'get_min_delivery_time',  # aggregierte minimale Lieferzeit
-        'updated_at',  # zuletzt aktualisiert (für Sortierung hilfreich)
-        'created_at',  # erstellt am
-    )
-
-    # Spalten, über die die Liste sortiert werden kann (default)
-    ordering = ('-updated_at',)  # neueste zuerst
-
-    # Welche Relationen gleich mitgeladen werden (Performance)
-    list_select_related = ('user',)  # user direkt joinen
-
-    # Suchfelder oben in der Liste
-    search_fields = (
-        'title',  # Suche im Titel
-        'description',  # Suche in der Beschreibung
-        'user__username',  # Suche im Username des Creators
-        'user__first_name',  # Vorname des Creators
-        'user__last_name',  # Nachname des Creators
-    )
-
-    # Filter rechts in der Seitenleiste
-    list_filter = (
-        'created_at',  # nach Erstellungsdatum filtern
-        'updated_at',  # nach Änderungsdatum filtern
-    )
-
-    # Inline-Bereich für OfferDetails einbinden
-    inlines = [OfferDetailInline]  # zeigt OfferDetail als "extra Bereich" an
-
-    # Felder, die im Detail readonly sein sollen
-    readonly_fields = (
-        'created_at',  # Timestamps nicht editierbar
+        'id',
+        'creator_username',
+        'title',
+        'get_min_price',
+        'get_min_delivery_time',
         'updated_at',
-        'min_price',  # aggregierte Werte nur lesbar
+        'created_at',
+    )
+    ordering = ('-updated_at',)
+    list_select_related = ('user',)
+    search_fields = (
+        'title',
+        'description',
+        'user__username',
+        'user__first_name',
+        'user__last_name',
+    )
+    list_filter = (
+        'created_at',
+        'updated_at',
+    )
+    inlines = [OfferDetailInline]
+    readonly_fields = (
+        'created_at',
+        'updated_at',
+        'min_price',
         'min_delivery_time',
-        'creator_link',  # schöner Link zum User im Admin
-        'user_username',  # Creator-Infos als readonly Kopie
+        'creator_link',
+        'user_username',
         'user_first_name',
         'user_last_name',
     )
-
-    # Gruppiere Felder in Abschnitte (fieldsets)
     fieldsets = (
-        ('Angebot', {  # Hauptdaten des Offers
+        ('Angebot', {
             'fields': ('user', 'title', 'image', 'description')
         }),
-        ('Aggregierte Werte', {  # eigener Bereich für min-Werte
+        ('Aggregierte Werte', {
             'fields': ('min_price', 'min_delivery_time'),
-            'classes': ('collapse',),  # einklappbar für Übersicht
+            'classes': ('collapse',),
         }),
-        ('Creator', {  # eigener Bereich mit Creator-Infos + Link
+        ('Creator', {
             'fields': ('creator_link', 'user_username', 'user_first_name', 'user_last_name'),
         }),
-        ('System', {  # Systemfelder (nur lesen)
+        ('System', {
             'fields': ('created_at', 'updated_at'),
         }),
     )
 
     def get_queryset(self, request):
-        # Queryset für die Liste/Detailansicht — mit Annotationen & Joins
-        qs = super().get_queryset(request)  # Basismethode aufrufen
-        qs = qs.select_related('user')  # User joinen (weniger DB-Queries)
-        qs = qs.annotate(  # aggregierte Felder vorab berechnen
-            _min_price=Min('details__price'),  # min Preis aus OfferDetail
-            _min_delivery_time=Min('details__delivery_time'),  # min Lieferzeit
+        qs = super().get_queryset(request)
+        qs = qs.select_related('user')
+        qs = qs.annotate(
+            _min_price=Min('details__price'),
+            _min_delivery_time=Min('details__delivery_time'),
         )
-        return qs  # annotiertes Queryset zurückgeben
-
-    # ---------- Spalten/Attribute für die Liste ----------
+        return qs
 
     def creator_username(self, obj):
-        # Username des zugeordneten Users anzeigen
         return obj.user.username if obj.user_id else '-'
-    creator_username.short_description = 'Creator'  # Spaltenüberschrift
-    creator_username.admin_order_field = 'user__username'  # sortierbar nach Username
+    creator_username.short_description = 'Creator'
+    creator_username.admin_order_field = 'user__username'
 
     def get_min_price(self, obj):
-        # Aggregat aus get_queryset() nutzen (fällt auf None zurück)
         return obj._min_price
-    get_min_price.short_description = 'min_price'  # Spaltenname wie im API-Response
-    get_min_price.admin_order_field = '_min_price'  # sortierbar nach Annotation
+    get_min_price.short_description = 'min_price'
+    get_min_price.admin_order_field = '_min_price'
 
     def get_min_delivery_time(self, obj):
-        # Aggregat aus get_queryset() nutzen
         return obj._min_delivery_time
-    get_min_delivery_time.short_description = 'min_delivery_time'  # Spaltenname
-    get_min_delivery_time.admin_order_field = '_min_delivery_time'  # sortierbar
-
-    # ---------- Readonly-Felder in der Detailansicht ----------
+    get_min_delivery_time.short_description = 'min_delivery_time'
+    get_min_delivery_time.admin_order_field = '_min_delivery_time'
 
     def min_price(self, obj):
-        # selbe Annotation auch in der Detailansicht verfügbar machen
-        # Hinweis: bei neuem (ungespeicherten) Objekt gibt es noch keine Details → None
         return getattr(obj, '_min_price', None)
-    min_price.short_description = 'min_price'  # Label im Formular
+    min_price.short_description = 'min_price'
 
     def min_delivery_time(self, obj):
-        # minimale Lieferzeit im Formularbereich anzeigen
         return getattr(obj, '_min_delivery_time', None)
     min_delivery_time.short_description = 'min_delivery_time'
 
     def creator_link(self, obj):
-        # klickbarer Link zum zugehörigen User im Admin
         if not obj.user_id:
             return '-'
-        # Standard-URL zum User-Change im Admin (auth.User anpassen, falls Custom-App)
         return format_html(
             '<a href="/admin/auth/user/{}/change/">{}</a>',
             obj.user_id,
@@ -136,7 +106,6 @@ class OfferAdmin(admin.ModelAdmin):
         )
     creator_link.short_description = 'Creator (Link)'
 
-    # Die folgenden Felder zeigen Creator-Daten im schreibgeschützten Bereich
     def user_username(self, obj):
         return obj.user.username if obj.user_id else ''
     user_username.short_description = 'username'
@@ -152,20 +121,21 @@ class OfferAdmin(admin.ModelAdmin):
 
 @admin.register(OfferDetail)
 class OfferDetailAdmin(admin.ModelAdmin):
-    # Optional: separates Admin für OfferDetail (praktisch bei direkter Suche)
-    list_display = ('id', 'offer', 'name', 'price', 'delivery_time')  # Spalten in der Liste
-    list_select_related = ('offer', 'offer__user')  # Offer & User joinen
+    """Provides separate Admin for OfferDetail"""
+    list_display = ('id', 'offer', 'name', 'price', 'delivery_time')
+    list_select_related = ('offer', 'offer__user')
     search_fields = (
-        'name',  # Name der Option
-        'offer__title',  # Titel des zugehörigen Offers
-        'offer__user__username',  # Creator-Username
+        'name',
+        'offer__title',
+        'offer__user__username',
     )
-    list_filter = ('delivery_time',)  # schneller Filter auf Lieferzeit
-    ordering = ('offer_id', 'id')  # stabile Sortierung
+    list_filter = ('delivery_time',)
+    ordering = ('offer_id', 'id')
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
+    """Provides Admin columns for Orders"""
     list_display = ('id', 'title', 'customer_user', 'business_user', 'status', 'created_at')
     list_filter = ('status', 'offer_type', 'created_at')
     search_fields = ('title', 'customer_user__username', 'business_user__username')
@@ -173,40 +143,28 @@ class OrderAdmin(admin.ModelAdmin):
     
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
-    # Spalten in der Listenansicht
+    """Provides Admin columns for Reviews"""
     list_display = (
-        'id',                 # Primärschlüssel
-        'business_username',  # lesbarer Name des Business-Users
-        'reviewer_username',  # lesbarer Name des Reviewers (Customer)
-        'rating',             # Sterne
-        'updated_at',         # zuletzt geändert
-        'created_at',         # erstellt
+        'id',
+        'business_username',
+        'reviewer_username',
+        'rating',
+        'updated_at',
+        'created_at',
     )
-
-    # Sortierung (neueste Änderungen zuerst)
     ordering = ('-updated_at',)
-
-    # Performance: User-Relationen direkt joinen
     list_select_related = ('business_user', 'reviewer')
-
-    # Suche (auch über Usernamen + Freitext)
     search_fields = (
-        'description',                   # Textsuche in der Bewertung
-        'business_user__username',       # Username Business
-        'reviewer__username',            # Username Reviewer
-        'business_user__first_name',     # Vorname Business
-        'business_user__last_name',      # Nachname Business
-        'reviewer__first_name',          # Vorname Reviewer
-        'reviewer__last_name',           # Nachname Reviewer
+        'description',                
+        'business_user__username', 
+        'reviewer__username',       
+        'business_user__first_name',
+        'business_user__last_name', 
+        'reviewer__first_name',     
+        'reviewer__last_name',      
     )
-
-    # Filter rechts
     list_filter = ('rating', 'created_at', 'updated_at')
-
-    # Schreibgeschützte Felder im Detail
     readonly_fields = ('created_at', 'updated_at', 'business_link', 'reviewer_link')
-
-    # Felder in Gruppen strukturieren
     fieldsets = (
         ('Beziehung', {
             'fields': ('business_user', 'reviewer', 'business_link', 'reviewer_link')
@@ -220,24 +178,17 @@ class ReviewAdmin(admin.ModelAdmin):
         }),
     )
 
-    # -------- Hilfsfelder für Listendarstellung --------
-
     def business_username(self, obj):
-        # zeige Business-Username in der Liste
         return obj.business_user.username if obj.business_user_id else '-'
     business_username.short_description = 'Business'
     business_username.admin_order_field = 'business_user__username'
 
     def reviewer_username(self, obj):
-        # zeige Reviewer-Username in der Liste
         return obj.reviewer.username if obj.reviewer_id else '-'
     reviewer_username.short_description = 'Reviewer'
     reviewer_username.admin_order_field = 'reviewer__username'
 
-    # -------- Readonly-Links im Formular --------
-
     def business_link(self, obj):
-        # klickbarer Link zum Business-User im Admin
         if not obj.business_user_id:
             return '-'
         return format_html('<a href="/admin/auth/user/{}/change/">{}</a>',
@@ -245,7 +196,6 @@ class ReviewAdmin(admin.ModelAdmin):
     business_link.short_description = 'Business (Link)'
 
     def reviewer_link(self, obj):
-        # klickbarer Link zum Reviewer-User im Admin
         if not obj.reviewer_id:
             return '-'
         return format_html('<a href="/admin/auth/user/{}/change/">{}</a>',
