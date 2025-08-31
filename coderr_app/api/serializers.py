@@ -255,3 +255,59 @@ class OfferCreateSerializer(serializers.ModelSerializer):  # <<< NEW
         # aktualisieren (IDs/Relationen)
         offer.refresh_from_db()
         return offer
+    
+  
+# In deiner Liste (OfferListSerializer) nutzt du bewusst relative Detail-URLs (/offerdetails/<id>/). Für den Detail-Endpoint verlangt die Spezifikation absolute URLs. Darum trenne ich das sauber in OfferDetailMiniAbsSerializer und OfferRetrieveSerializer, ohne das Listen-Verhalten zu ändern.  
+# ------------------------------------------------------------
+# <<< NEW: Mini-Serializer mit ABSOLUTER URL (für GET /offers/{id}/)
+# ------------------------------------------------------------
+class OfferDetailMiniAbsSerializer(serializers.ModelSerializer):          # kompaktes Detailobjekt (id + absolute URL)
+    url = serializers.SerializerMethodField()                             # URL wird dynamisch aus request gebaut
+
+    class Meta:
+        model = OfferDetail                                              # Quelle: OfferDetail-Modell
+        fields = ('id', 'url')                                           # nur id + url (wie Anforderung)
+
+    def get_url(self, obj):                                              # baut 'http://127.0.0.1:8000/api/offerdetails/<id>/'
+        request = self.context.get('request')                            # request ist nötig für absolute URL
+        path = f'/api/offerdetails/{obj.pk}/'                            # API-Pfad gemäß Frontend-Konstanten (config.js)
+        return request.build_absolute_uri(path) if request else path     # fallback: relative URL, falls kein request vorhanden
+
+
+# ------------------------------------------------------------
+# <<< NEW: Serializer für EIN Angebot (GET /offers/{id}/)
+# ------------------------------------------------------------
+class OfferRetrieveSerializer(serializers.ModelSerializer):               # Ausgabeformat für Detail-Endpunkt
+    details = OfferDetailMiniAbsSerializer(many=True, read_only=True)     # nutzt related_name='details' (siehe models)
+    min_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)   # kommt per Annotation
+    min_delivery_time = serializers.IntegerField(read_only=True)          # kommt per Annotation
+
+    class Meta:
+        model = Offer                                                    # Basis ist Offer
+        fields = (
+            'id', 'user', 'title', 'image', 'description',              # Felder 1:1 wie in der Anforderung
+            'created_at', 'updated_at',
+            'details', 'min_price', 'min_delivery_time',
+        )
+
+
+# ------------------------------------------------------------
+# <<< NEW: Serializer für GET /api/offerdetails/{id}/
+# ------------------------------------------------------------
+# Dein OfferDetail-Modell enthält diese Felder bereits: title, revisions, delivery_time_in_days, price, features, offer_type. Siehe dein Modell:
+class OfferDetailRetrieveSerializer(serializers.ModelSerializer):         # Einzel-Detail-Ausgabe
+    # Alle Felder sind read_only, da es ein GET-Endpoint ist
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)  # Zahl, kein String
+
+    class Meta:
+        model = OfferDetail                                               # Quelle ist unser Detailmodell
+        fields = (
+            'id',                         # ID des Angebotsdetails
+            'title',                      # Titel (z. B. "Basic Design")
+            'revisions',                  # Anzahl der Revisionen
+            'delivery_time_in_days',      # Lieferzeit in Tagen (neues Feld)
+            'price',                      # Preis
+            'features',                   # Liste von Features (Strings)
+            'offer_type',                 # 'basic' | 'standard' | 'premium'
+        )
+        

@@ -5,13 +5,15 @@ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticate
 from rest_framework.exceptions import ValidationError  # für 400-Fehler
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from rest_framework import status  # Statuscodes
+from rest_framework.generics import RetrieveAPIView  # <<< NEW: Einzelabruf eines Objekts
+from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
-from auth_app.models import Profile  # Profilmodell importieren
+from auth_app.models import Profile
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
-from coderr_app.models import Offer  # unser Modell
-from coderr_app.api.serializers import OfferListSerializer, OfferCreateSerializer    # Ausgabeformat
-from coderr_app.api.pagination import OfferPageNumberPagination  # PageNumberPagination
+from coderr_app.models import Offer, OfferDetail
+from coderr_app.api.serializers import OfferListSerializer, OfferCreateSerializer, OfferRetrieveSerializer, OfferDetailRetrieveSerializer
+from coderr_app.api.pagination import OfferPageNumberPagination
+
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
@@ -154,3 +156,37 @@ class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView
                 qs = qs.order_by('-updated_at')
 
         return qs
+    
+
+
+# 404 bei unbekannter ID macht DRF automatisch (RetrieveAPIView).
+# 500 fängt dein globaler Exception-Handler ab (in Settings konfiguriert) — du hast dort einen Custom-Handler vorgesehen (in deinen Settings ist ein Custom-Pfad hinterlegt; das allgemeine Prinzip kommt aus deiner exceptions.py Vorlage ).
+class OfferRetrieveView(RetrieveAPIView):                                  # <<< NEW: GET /api/offers/<pk>/
+    permission_classes = [IsAuthenticated]                                 # 401, wenn nicht eingeloggt (Anforderung)
+    serializer_class = OfferRetrieveSerializer                             # benutzt absoluten URL-Serializer
+
+    def get_queryset(self):                                                # Query inkl. Annotationen wie in Liste
+        return (
+            Offer.objects
+            .select_related('user')                                        # effizienter JOIN auf user
+            .prefetch_related('details')                                   # Details vorladen
+            .annotate(
+                min_delivery_time=Min(                                     # minimaler Tagewert (neues oder legacy Feld)
+                    Case(
+                        When(details__delivery_time_in_days__isnull=False, then=F('details__delivery_time_in_days')),
+                        default=F('details__delivery_time'),
+                        output_field=IntegerField(),
+                    )
+                ),
+                min_price=Min('details__price'),                           # minimaler Preis über alle Details
+            )
+        )
+        
+
+# ------------------------------------------------------------
+# <<< NEW: GET /api/offerdetails/<pk>/  (auth-pflichtig)
+# ------------------------------------------------------------
+class OfferDetailRetrieveView(RetrieveAPIView):                     # Einzelnes Angebotsdetail abrufen
+    permission_classes = [IsAuthenticated]                          # 401 falls nicht eingeloggt (Vorgabe)
+    serializer_class = OfferDetailRetrieveSerializer                # Ausgabeformat laut Spezifikation
+    queryset = OfferDetail.objects.all()                            # 404 bei unbekannter ID handled DRF automatisch
