@@ -1,7 +1,9 @@
 from django.contrib import admin  # Admin-Registrierung & Basisklassen
 from django.db.models import Min  # Aggregat-Funktion für min()
 from django.utils.html import format_html  # sichere HTML-Ausgabe (Link zum User)
-from .models import Offer, OfferDetail  # unsere Modelle
+from coderr_app.models import Offer, OfferDetail, Order  # unsere Modelle
+
+
 
 class OfferDetailInline(admin.TabularInline):
     # Inline-Tabelle für OfferDetail, erscheint im Offer-Detail als "extra Bereich"
@@ -160,3 +162,10 @@ class OfferDetailAdmin(admin.ModelAdmin):
     )
     list_filter = ('delivery_time',)  # schneller Filter auf Lieferzeit
     ordering = ('offer_id', 'id')  # stabile Sortierung
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'customer_user', 'business_user', 'status', 'created_at')
+    list_filter = ('status', 'offer_type', 'created_at')
+    search_fields = ('title', 'customer_user__username', 'business_user__username')
