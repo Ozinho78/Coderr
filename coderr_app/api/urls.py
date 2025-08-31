@@ -17,3 +17,12 @@ urlpatterns = [
     path('offers/<int:pk>/', OfferRetrieveView.as_view(), name='offers-detail'), # GET /api/offers/<pk>/
     path('offerdetails/<int:pk>/', OfferDetailRetrieveView.as_view(), name='offerdetails-detail'),
 ]
+
+
+# Was passiert beim Löschen von Offers (http://127.0.0.1:8000/api/offers/66/)?
+# 204 No Content: DRF’s DestroyModelMixin (in RetrieveUpdateDestroyAPIView) antwortet standardkonform ohne Body.
+# 401: Kein Token → IsAuthenticated.
+# 403: Eingeloggt, aber nicht der Ersteller → IsOwnerOrReadOnly. (Du importierst diese Permission bereits in der Datei.)
+# 404: Unbekannte ID → handled automatisch.
+# 500: Unerwartet → dein globaler Handler.
+# Cascade: Durch dein Modell werden zugehörige OfferDetail-Einträge automatisch mitgelöscht (ForeignKey(..., on_delete=models.CASCADE, related_name='details')).

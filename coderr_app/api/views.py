@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError  # für 400-Fehler
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.generics import RetrieveAPIView  # <<< NEW: Einzelabruf eines Objekts
+from rest_framework.generics import RetrieveUpdateDestroyAPIView  # <<< NEW: GET + PATCH + DELETE
 from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
 from auth_app.models import Profile
@@ -199,10 +200,13 @@ class OfferDetailRetrieveView(RetrieveAPIView):                     # Einzelnes 
 # ------------------------------------------------------------
 # <<< CHANGE: OfferRetrieveView → RetrieveUpdateAPIView (GET + PATCH)
 # ------------------------------------------------------------
-class OfferRetrieveView(RetrieveUpdateAPIView):                          # jetzt auch PATCH möglich
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]           # 401 + 403 (nur Owner darf ändern)
-    serializer_class = OfferRetrieveSerializer                          # Default: GET nutzt diesen Serializer
+# 404 bei unbekannter ID macht DRF automatisch (Retrieve/DestroyAPIView).
+# 500 fängt dein globaler Exception-Handler ab (in Settings konfiguriert).
+class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch PATCH + DELETE
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]  # CHANGE: Owner-Gate für Write/DELETE, 401: nicht eingeloggt, 403: nicht der Owner (nur Ersteller darf löschen/ändern)
+    serializer_class = OfferRetrieveSerializer  # GET nutzt weiterhin die Detailausgabe (mit absoluten URLs)
 
+    # get_queryset() bleibt unverändert (Annotationen, Prefetch, etc.)
     def get_queryset(self):                                             # wie gehabt inkl. Annotationen/Vorladen
         return (
             Offer.objects
