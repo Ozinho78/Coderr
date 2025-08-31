@@ -91,13 +91,14 @@ http://127.0.0.1:8000/api/
 
 
 ### Example Endpoints
-POST /api/registration/ → Register new user
-POST /api/login/ → Login and get token
-GET /api/profiles/business/ → List all business profiles
-GET /api/offers/ → List all offers
-POST /api/orders/ → Create a new order
-GET /api/reviews/ → List all reviews
-POST /api/reviews/ → Create a review (customer only)
-GET /api/base-info/ → Get platform statistics
-
-
+POST /api/registration/ → Register new user <br>
+POST /api/login/ → Login and get token <br>
+GET /api/profiles/business/ → List all business profiles <br>
+GET /api/offers/ → List all offers <br>
+POST /api/orders/ → Create a new order <br>
+GET /api/reviews/ → List all reviews <br>
+POST /api/reviews/ → Create a review (customer only) <br>
+GET /api/base-info/ → Get platform statistics <br>
+<br>
+<br>
+<br>
