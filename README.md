@@ -1,19 +1,32 @@
-# Backend Project for Kanban-App with Django REST Framework (DRF)
+# Backend Project for Coderr-App with Django REST Framework (DRF)
 
-This project is the backend for a Freelancer-Platform-App, built with Django and Django REST Framework (DRF).
-It offers endpoints for creating, reading, updating and deleting (CRUD) boards, lists, cards and comments.
+This project is the backend for the **Coderr Freelancer Platform**, built with Django and Django REST Framework (DRF).  
+It provides APIs for user management, offers, orders, reviews, and profiles of both customers and business users.  
+The backend connects to a given frontend (JS-based) and exposes all required REST endpoints.
 
 -------------------------------------------------------------------------------------------------------------
 
 ## Features
 
-- User authentication and authorization, using Django's built-in authentication system.
-- Board creation, reading, updating and deletion.
-- Adding members to a board.
-- Task creation, reading, updating and deletion.
-- Tasks contain assignee and reviewer.
-- Filtering and sorting of tasks by assignee, reviewer, status and priority.
-- Adding comments to tasks.
+- **User Authentication & Registration**
+  - Token-based authentication
+  - Two profile types: `customer` and `business`
+  - Custom validators for email and password strength
+- **Profiles**
+  - Business and customer profiles with full details
+  - Endpoints to fetch all business or customer profiles
+- **Offers**
+  - Business users can create, update, delete and list offers
+  - Offer details with pricing models (basic, standard, premium)
+- **Orders**
+  - Customers can place orders on offers
+  - Endpoints to track in-progress, completed, pending, and delivered orders
+  - Count endpoints: `order-count/{business_user_id}/` and `completed-order-count/{business_user_id}/`
+- **Reviews**
+  - Customers can leave reviews for business users
+  - One review per customer per business
+- **Base Info**
+  - Aggregated platform statistics (review count, average rating, business user count, offer count)
 
 -------------------------------------------------------------------------------------------------------------
 
@@ -21,8 +34,9 @@ It offers endpoints for creating, reading, updating and deleting (CRUD) boards, 
 
 - [Django](https://www.djangoproject.com/) 5.x
 - [Django REST Framework](https://www.django-rest-framework.org/)
-- SQLite as the database.
+- [SQLite](https://www.sqlite.org/) (default database)
 - Token Authentication
+- CORS enabled (for frontend integration)
 
 -------------------------------------------------------------------------------------------------------------
 
@@ -30,8 +44,8 @@ It offers endpoints for creating, reading, updating and deleting (CRUD) boards, 
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Ozinho78/KanMindBackend
-cd KanMindBackend
+git clone https://github.com/Ozinho78/Coderr
+cd Coderr
 ```
 
 
@@ -55,25 +69,35 @@ pip install -r requirements.txt
 ```
 
 
-### 4. Change into project folder
-```bash
-cd kanmind
-```
-
-
-### 5. Run database migrations
+### 4. Run database migrations
 ```bash
 python manage.py migrate
 ```
 
 
-### 6. Creating a superuser
+### 5. Creating a superuser
 ```bash
 python manage.py createsuperuser
 ```
 
 
-### 7. Run the server
+### 6. Run the server
 ``` bash
 python manage.py runserver
 ```
+
+### The API will be available at:
+http://127.0.0.1:8000/api/
+
+
+### Example Endpoints
+POST /api/registration/ → Register new user
+POST /api/login/ → Login and get token
+GET /api/profiles/business/ → List all business profiles
+GET /api/offers/ → List all offers
+POST /api/orders/ → Create a new order
+GET /api/reviews/ → List all reviews
+POST /api/reviews/ → Create a review (customer only)
+GET /api/base-info/ → Get platform statistics
+
+
