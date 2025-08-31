@@ -1,7 +1,7 @@
 from django.contrib import admin  # Admin-Registrierung & Basisklassen
 from django.db.models import Min  # Aggregat-Funktion für min()
 from django.utils.html import format_html  # sichere HTML-Ausgabe (Link zum User)
-from coderr_app.models import Offer, OfferDetail, Order  # unsere Modelle
+from coderr_app.models import Offer, OfferDetail, Order, Review  # unsere Modelle
 
 
 
@@ -169,3 +169,85 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'customer_user', 'business_user', 'status', 'created_at')
     list_filter = ('status', 'offer_type', 'created_at')
     search_fields = ('title', 'customer_user__username', 'business_user__username')
+    
+    
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    # Spalten in der Listenansicht
+    list_display = (
+        'id',                 # Primärschlüssel
+        'business_username',  # lesbarer Name des Business-Users
+        'reviewer_username',  # lesbarer Name des Reviewers (Customer)
+        'rating',             # Sterne
+        'updated_at',         # zuletzt geändert
+        'created_at',         # erstellt
+    )
+
+    # Sortierung (neueste Änderungen zuerst)
+    ordering = ('-updated_at',)
+
+    # Performance: User-Relationen direkt joinen
+    list_select_related = ('business_user', 'reviewer')
+
+    # Suche (auch über Usernamen + Freitext)
+    search_fields = (
+        'description',                   # Textsuche in der Bewertung
+        'business_user__username',       # Username Business
+        'reviewer__username',            # Username Reviewer
+        'business_user__first_name',     # Vorname Business
+        'business_user__last_name',      # Nachname Business
+        'reviewer__first_name',          # Vorname Reviewer
+        'reviewer__last_name',           # Nachname Reviewer
+    )
+
+    # Filter rechts
+    list_filter = ('rating', 'created_at', 'updated_at')
+
+    # Schreibgeschützte Felder im Detail
+    readonly_fields = ('created_at', 'updated_at', 'business_link', 'reviewer_link')
+
+    # Felder in Gruppen strukturieren
+    fieldsets = (
+        ('Beziehung', {
+            'fields': ('business_user', 'reviewer', 'business_link', 'reviewer_link')
+        }),
+        ('Bewertung', {
+            'fields': ('rating', 'description')
+        }),
+        ('System', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    # -------- Hilfsfelder für Listendarstellung --------
+
+    def business_username(self, obj):
+        # zeige Business-Username in der Liste
+        return obj.business_user.username if obj.business_user_id else '-'
+    business_username.short_description = 'Business'
+    business_username.admin_order_field = 'business_user__username'
+
+    def reviewer_username(self, obj):
+        # zeige Reviewer-Username in der Liste
+        return obj.reviewer.username if obj.reviewer_id else '-'
+    reviewer_username.short_description = 'Reviewer'
+    reviewer_username.admin_order_field = 'reviewer__username'
+
+    # -------- Readonly-Links im Formular --------
+
+    def business_link(self, obj):
+        # klickbarer Link zum Business-User im Admin
+        if not obj.business_user_id:
+            return '-'
+        return format_html('<a href="/admin/auth/user/{}/change/">{}</a>',
+                           obj.business_user_id, obj.business_user.username)
+    business_link.short_description = 'Business (Link)'
+
+    def reviewer_link(self, obj):
+        # klickbarer Link zum Reviewer-User im Admin
+        if not obj.reviewer_id:
+            return '-'
+        return format_html('<a href="/admin/auth/user/{}/change/">{}</a>',
+                           obj.reviewer_id, obj.reviewer.username)
+    reviewer_link.short_description = 'Reviewer (Link)'

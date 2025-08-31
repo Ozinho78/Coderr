@@ -503,7 +503,8 @@ class CompletedOrderCountView(APIView):
 class ReviewListView(ListAPIView):
     permission_classes = [IsAuthenticated]                 # 401 sonst
     serializer_class = ReviewListSerializer                # Felder wie gefordert
-    pagination_class = ReviewPageNumberPagination          # optional (s.o.)
+    # pagination_class = ReviewPageNumberPagination          # optional (s.o.)
+    pagination_class = None
 
     def get_queryset(self):
         # Basis: alle Reviews, sinnvolle Standard-Sortierung
