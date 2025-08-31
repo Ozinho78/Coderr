@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # 'auth_app',
     'auth_app.apps.AuthAppConfig',  # nutzt die AppConfig mit ready() -> lädt signals
     'coderr_app',
+    'corsheaders',
 ]
 
 REST_FRAMEWORK = {
@@ -60,6 +61,7 @@ REST_FRAMEWORK = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -186,3 +188,11 @@ LOGGING = {
         'rest_framework': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': False},
     }
 }
+
+# CORS Einstellungen
+CORS_ALLOW_ALL_ORIGINS = True   # erlaubt alle Domains (für Entwicklung praktisch)
+# oder spezifisch:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+# ]
