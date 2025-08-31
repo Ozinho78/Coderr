@@ -27,7 +27,9 @@ from coderr_app.api.serializers import (
     OfferPatchResponseSerializer, 
     OrderListSerializer,
     OrderCreateInputSerializer,
-    OrderStatusPatchSerializer
+    OrderStatusPatchSerializer,
+    ReviewCreateSerializer,
+    ReviewUpdateSerializer,
 )
 from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumberPagination
 
@@ -500,40 +502,88 @@ class CompletedOrderCountView(APIView):
     
     
 # --- GET /api/reviews/ --------------------------------------------------------
-class ReviewListView(ListAPIView):
-    permission_classes = [IsAuthenticated]                 # 401 sonst
-    serializer_class = ReviewListSerializer                # Felder wie gefordert
-    # pagination_class = ReviewPageNumberPagination          # optional (s.o.)
-    pagination_class = None
+class ReviewListView(ListCreateAPIView):
+    permission_classes = [IsAuthenticated]     # 401 wenn nicht eingeloggt
+    pagination_class = None                    # flache Liste, nicht paginiert
+
+    def get_serializer_class(self):
+        # GET → List-Serializer, POST → Create-Serializer
+        return ReviewCreateSerializer if self.request.method == 'POST' else ReviewListSerializer
 
     def get_queryset(self):
-        # Basis: alle Reviews, sinnvolle Standard-Sortierung
+        # Standard: neueste zuerst
         qs = Review.objects.all().order_by('-updated_at')
 
-        # Query-Parameter lesen
+        # Filter/Ordering wie zuvor
         params = self.request.query_params
 
-        # business_user_id (int) filter
         business_user_id = params.get('business_user_id')
         if business_user_id:
             if not str(business_user_id).isdigit():
                 raise ValidationError({'business_user_id': 'Muss eine ganze Zahl sein.'})
             qs = qs.filter(business_user_id=int(business_user_id))
 
-        # reviewer_id (int) filter
         reviewer_id = params.get('reviewer_id')
         if reviewer_id:
             if not str(reviewer_id).isdigit():
                 raise ValidationError({'reviewer_id': 'Muss eine ganze Zahl sein.'})
             qs = qs.filter(reviewer_id=int(reviewer_id))
 
-        # ordering: 'updated_at' oder 'rating' (ohne Minus laut Vorgabe)
         ordering = params.get('ordering')
         if ordering:
-            allowed = {'updated_at', 'rating'}
-            if ordering not in allowed:
+            if ordering not in {'updated_at', 'rating'}:
                 raise ValidationError({'ordering': 'Ungültig: updated_at oder rating'})
-            qs = qs.order_by(ordering)  # aufsteigend
-        # sonst Default: '-updated_at' (neueste zuerst)
-
+            qs = qs.order_by(ordering)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        # Nur Kunden dürfen erstellen (explizit prüfen, damit wir saubere Meldung/403 liefern)
+        profile = Profile.objects.filter(user=request.user).first()
+        if not profile or profile.type != 'customer':
+            return Response({'detail': 'Nur Kunden dürfen Bewertungen erstellen.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Validierung + Erzeugung
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()  # create() setzt reviewer
+
+        # Ausgabe im Leseformat (inkl. reviewer/business_user IDs + Timestamps)
+        out = ReviewListSerializer(review)
+        return Response(out.data, status=status.HTTP_201_CREATED)    
+
+    
+    
+class ReviewDetailView(RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]     # 401 für alle Write/Read ohne Login
+    queryset = Review.objects.all()            # 404 handled DRF
+    lookup_field = 'pk'
+
+    def get_serializer_class(self):
+        # PATCH → Update-Serializer (nur rating/description), GET → List-Serializer
+        return ReviewUpdateSerializer if self.request.method in ('PATCH', 'PUT') else ReviewListSerializer
+
+    def update(self, request, *args, **kwargs):
+        # Nur Ersteller darf bearbeiten
+        review = self.get_object()
+        if review.reviewer_id != request.user.id:
+            return Response({'detail': 'Forbidden: nicht der Ersteller dieser Bewertung.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if request.method == 'PUT':
+            return Response({'detail': 'Nur PATCH ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(review, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()  # speichert rating/description; updated_at aktualisiert sich automatisch
+
+        # Antwort im Leseformat inkl. IDs/Timestamps
+        out = ReviewListSerializer(review)
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        # Nur Ersteller darf löschen
+        review = self.get_object()
+        if review.reviewer_id != request.user.id:
+            return Response({'detail': 'Forbidden: nicht der Ersteller dieser Bewertung.'}, status=status.HTTP_403_FORBIDDEN)
+
+        self.perform_destroy(review)
+        return Response(status=status.HTTP_204_NO_CONTENT)

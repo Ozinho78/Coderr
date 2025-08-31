@@ -549,3 +549,80 @@ class ReviewListSerializer(serializers.ModelSerializer):
         if business and reviewer and getattr(business, 'id', None) == getattr(reviewer, 'id', None):
             raise serializers.ValidationError({'non_field_errors': ['Reviewer darf sich nicht selbst bewerten.']})
         return attrs
+    
+    
+class ReviewCreateSerializer(serializers.ModelSerializer):
+    # Input: business_user als ID, rating 1..5, description optional
+    business_user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
+
+    class Meta:
+        model = Review
+        fields = ('id', 'business_user', 'rating', 'description')  # reviewer/ts kommen serverseitig
+
+    def validate_rating(self, value):
+        # Range 1..5 sicherstellen
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating muss zwischen 1 und 5 liegen.')
+        return value
+
+    def validate(self, attrs):
+        # Aktueller User (als Reviewer)
+        request = self.context.get('request')
+        reviewer = getattr(request, 'user', None)
+        business_user = attrs.get('business_user')
+
+        # muss eingeloggt sein
+        if not reviewer or not reviewer.is_authenticated:
+            # DRF kümmert sich i.d.R. um 401 via Permission, aber hier als Fallback
+            raise serializers.ValidationError({'detail': 'Authentication required.'})
+
+        # Reviewer-Profil muss 'customer' sein
+        r_profile = Profile.objects.filter(user=reviewer).first()
+        if not r_profile or r_profile.type != 'customer':
+            # laut Vorgabe: nur Kunden dürfen erstellen → 401/403; wir geben 403 zurück
+            raise serializers.ValidationError({'detail': 'Nur Kunden dürfen Bewertungen erstellen.'})
+
+        # Business muss existieren und ein Business-Profil haben
+        b_profile = Profile.objects.filter(user=business_user).first()
+        if not b_profile or b_profile.type != 'business':
+            raise serializers.ValidationError({'business_user': 'Kein gültiger Business-Benutzer.'})
+
+        # keine Selbstbewertung
+        if reviewer.id == business_user.id:
+            raise serializers.ValidationError({'non_field_errors': ['Eigene Profile dürfen nicht bewertet werden.']})
+
+        # Einmal pro (reviewer,business_user)
+        if Review.objects.filter(business_user=business_user, reviewer=reviewer).exists():
+            # laut Vorgabe: 400 möglich, wenn bereits bewertet
+            raise serializers.ValidationError({'non_field_errors': ['Es existiert bereits eine Bewertung für dieses Geschäftsprofil.']})
+
+        return attrs
+
+    def create(self, validated_data):
+        # reviewer aus request übernehmen
+        reviewer = self.context['request'].user
+        return Review.objects.create(reviewer=reviewer, **validated_data)
+
+
+class ReviewUpdateSerializer(serializers.ModelSerializer):
+    # Nur diese Felder dürfen verändert werden
+    class Meta:
+        model = Review
+        fields = ('rating', 'description')          # business_user/reviewer bleiben unverändert
+        extra_kwargs = {
+            'description': {'required': False, 'allow_blank': True},
+        }
+
+    def validate(self, attrs):
+        # Nur die erlaubten Keys akzeptieren → alles andere 400
+        allowed = {'rating', 'description'}
+        extras = set(getattr(self, 'initial_data', {}).keys()) - allowed
+        if extras:
+            raise serializers.ValidationError('Nur die Felder "rating" und "description" dürfen aktualisiert werden.')
+        return attrs
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating muss zwischen 1 und 5 liegen.')
+        return value
+    
