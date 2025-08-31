@@ -481,20 +481,47 @@ class OrderCreateInputSerializer(serializers.Serializer):
 
 # Dein Order-Modell enthält die Status-Choices, daran validieren wir.
 # Extra-Schutz: es wird wirklich nur status akzeptiert.    
-class OrderStatusPatchSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Order
-        fields = ('status',)  # nur dieses Feld patchbar
+# class OrderStatusPatchSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Order
+#         fields = ('status',)  # nur dieses Feld patchbar
 
-    def validate_status(self, value):
-        # Erlaubte Werte direkt aus dem Modell (Choices: pending, in_progress, delivered, completed, cancelled)
-        valid = {choice[0] for choice in Order._meta.get_field('status').choices}  # siehe Modell-Choices :contentReference[oaicite:1]{index=1}
-        if value not in valid:
-            raise serializers.ValidationError('Ungültiger Status.')
-        return value
+#     def validate_status(self, value):
+#         # Erlaubte Werte direkt aus dem Modell (Choices: pending, in_progress, delivered, completed, cancelled)
+#         valid = {choice[0] for choice in Order._meta.get_field('status').choices}  # siehe Modell-Choices :contentReference[oaicite:1]{index=1}
+#         if value not in valid:
+#             raise serializers.ValidationError('Ungültiger Status.')
+#         return value
+
+#     def validate(self, attrs):
+#         # Sicherheit: nur 'status' zulassen – falls jemand mehr schickt, brettern wir 400 raus
+#         if set(attrs.keys()) != {'status'}:
+#             raise serializers.ValidationError('Nur das Feld "status" darf aktualisiert werden.')
+#         return attrs
+
+
+# ChoiceField(..., error_messages={'invalid_choice': 'Ungültiger Status.'}) sorgt dafür, dass dein Test-Assert den deutschen Text findet.
+# Über self.initial_data sehen wir auch Felder, die der Serializer nicht kennt (z. B. price) und können sauber 400 werfen – genau das erwartet dein Test.
+# Diese Änderung lässt die View unverändert funktionieren, denn sie benutzt ohnehin OrderStatusPatchSerializer(order, data=..., partial=True)
+class OrderStatusPatchSerializer(serializers.Serializer):
+    # ChoiceField mit deutscher Fehlermeldung beim invalid_choice
+    status = serializers.ChoiceField(
+        choices=Order._meta.get_field('status').choices,
+        error_messages={'invalid_choice': 'Ungültiger Status.'}
+    )
 
     def validate(self, attrs):
-        # Sicherheit: nur 'status' zulassen – falls jemand mehr schickt, brettern wir 400 raus
-        if set(attrs.keys()) != {'status'}:
+        # nur 'status' erlauben – alle anderen Keys führen zu 400 (non_field_errors)
+        allowed = {'status'}
+        extras = set(getattr(self, 'initial_data', {}).keys()) - allowed
+        if extras:
+            # landet im Test unter res.json()['non_field_errors'][0]
             raise serializers.ValidationError('Nur das Feld "status" darf aktualisiert werden.')
         return attrs
+    
+    def update(self, instance, validated_data):
+    # einzig erlaubtes Feld setzen
+        instance.status = validated_data['status']
+        # updated_at wird dank auto_now aktualisiert
+        instance.save(update_fields=['status', 'updated_at'])
+        return instance

@@ -359,34 +359,42 @@ class OrderListCreateView(ListCreateAPIView):
 # Antwort: voller Datensatz via OrderListSerializer, genau wie bei GET /api/orders/.
 # updated_at kommt automatisch aus auto_now.
 class OrderStatusUpdateView(RetrieveUpdateAPIView):
-    # GET (optional) + PATCH auf /api/orders/<pk>/
-    queryset = Order.objects.all()                     # Basis-Query
-    permission_classes = [IsAuthenticated, IsBusinessUser]  # 401/403 wenn kein Business-User
-    lookup_field = 'pk'                                # URL-Parameter 'id' → pk
+    queryset = Order.objects.all()               # Basis-Query
+    permission_classes = [IsAuthenticated]       # <<< nur Auth-Pflicht, keine Business-Permission hier
+    lookup_field = 'pk'
+    parser_classes = (JSONParser,)               # JSON-Body parsen
 
     def get_serializer_class(self):
-        # Für PATCH: Eingabe-Serializer (nur 'status'); Für GET: Ausgabe-Serializer
+        # PATCH/PUT → Eingabe-Serializer (nur 'status'); GET → Vollausgabe
         return OrderStatusPatchSerializer if self.request.method in ('PATCH', 'PUT') else OrderListSerializer
 
     def update(self, request, *args, **kwargs):
-        # Wir unterstützen nur PATCH (partiell); PUT blocken wir bewusst
+        # PUT bewusst blocken – nur PATCH erlaubt
         if request.method == 'PUT':
             return Response({'detail': 'Nur PATCH ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Ziel-Order laden (404 auto bei Nichtfinden)
+        # 1) Order laden (404 automatisch bei Nichtfinden)
         order = self.get_object()
 
-        # Objektberechtigung: nur der zugehörige Business-Owner dieser Bestellung darf den Status ändern
+        # 2) Typ-Check: nur Business-User dürfen Status ändern
+        profile = Profile.objects.filter(user=request.user).first()
+        if not profile or profile.type != 'business':
+            return Response({'detail': 'Nur Business-User dürfen den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 3) Owner-Check: nur der Business-Owner dieser Order
         if order.business_user_id != request.user.id:
             return Response({'detail': 'Nur der Business-Owner dieser Bestellung darf den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Eingabe validieren (nur 'status' erlaubt)
+        # 4) Eingabe validieren (erlaubt ist NUR 'status', Wert muss in den Choices liegen)
         serializer = OrderStatusPatchSerializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
-        # Speichern löst auto_now bei updated_at aus (siehe Modell) :contentReference[oaicite:5]{index=5}
+        # 5) Speichern → updated_at wird durch auto_now aktualisiert
         serializer.save()
+        order.refresh_from_db()  # optional
+        out = OrderListSerializer(order)
+        return Response(out.data, status=status.HTTP_200_OK)
 
-        # Ausgabe: komplette Order im bekannten Format
+        # 6) Komplette Order als Response zurückgeben
         out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_200_OK)
