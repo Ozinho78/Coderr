@@ -117,3 +117,17 @@ coderr_app/api/tests/*
 coderr_app/management/commands/*
 # media/*
 pytest.ini
+
+# git ls-files *tests* | % { git rm --cached $_ }
+# git rm --cached pytest.ini
+# git commit -m "Remove tests and ini files from repo"
+# git push
+**/tests/
+*.ini
+
+# git ls-files *media* | % { git rm --cached $_ }
+# 
+# git commit -m "Remove media and management folders from repo"
+# git push
+**/media/
+**/management/

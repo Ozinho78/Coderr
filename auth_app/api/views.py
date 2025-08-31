@@ -7,7 +7,7 @@ from auth_app.api.serializers import RegistrationSerializer, LoginSerializer
 
 
 class RegistrationView(APIView):
-    """"""
+    """Provides registration view"""
     authentication_classes = []
     permission_classes = []
 
@@ -32,6 +32,7 @@ class RegistrationView(APIView):
             
             
 class LoginView(APIView):
+    """Provides login view"""
     authentication_classes = []
     permission_classes = []
 

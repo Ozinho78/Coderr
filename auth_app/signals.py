@@ -14,7 +14,6 @@ def _guess_names_from_identity(username: str, email: str):
     import re
     local = (email or '').split('@')[0]
     candidates = [username or '', local]
-    # Split an ., _, -, Zahlen entfernen
     parts = []
     for c in candidates:
         tokens = re.split(r'[._\-]+', c)
