@@ -36,35 +36,16 @@ from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumbe
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
-    # Serializer konfigurieren, definiert Serializer
+
     serializer_class = ProfileDetailSerializer
-    # nur eingeloggte User dürfen zugreifen
+
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]   # Read: offen, Write: auth + owner
-    # Queryset, inkl. user für effiziente JOINs
+
     queryset = Profile.objects.select_related('user').all()
-    # {pk} aus der URL
-    # lookup_field = 'pk' # URL-Param: /api/profile/<pk>/
-    # WICHTIG: {pk} aus der URL soll auf profile.user_id matchen:
     lookup_field = 'user_id'        # Feld am Modell (implizit vorhanden durch FK)
     lookup_url_kwarg = 'pk'         # Name des URL-Params bleibt {pk}
     
-    # Hinweis: Wir überschreiben KEINE Methoden.
-    # DRF ruft bei PATCH intern get_object() → check_object_permissions() auf.
-    # IsAuthenticatedOrReadOnly blockt Unauth-Write (→ 401),
-    # IsOwnerOrReadOnly blockt Fremd-Write (→ 403).
 
-    # def get(self, request, *args, **kwargs):
-    #     # GET liefert Profildetails
-    #     try:
-    #         # Profil anhand pk finden (404 bei Nichtfinden)
-    #         profile = get_object_or_404(self.get_queryset(), pk=kwargs.get(self.lookup_field))
-    #         # serialisieren
-    #         serializer = self.get_serializer(profile)
-    #         # 200 OK mit Daten
-    #         return Response(serializer.data, status=status.HTTP_200_OK)
-    #     except Exception:
-    #         # Unerwarteter Fehler → 500
-    #         return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_update(self, serializer):                          # wird bei PATCH/PUT vor .save() aufgerufen
         profile = self.get_object()                                # holt das Zielprofil (404 falls nicht da)
@@ -72,20 +53,6 @@ class ProfileDetailView(RetrieveUpdateAPIView):
             raise PermissionDenied('Forbidden: not the owner of this profile.')  # -> 403
         serializer.save()                                          # speichert Profil + User-Felder
 
-    # def patch(self, request, *args, **kwargs):
-    #     try:
-    #         profile = get_object_or_404(self.get_queryset(), pk=kwargs.get(self.lookup_field))  # 404 wenn nicht da
-
-    #         # >>> NEU: Eigentümer-Check – nur der Owner darf ändern
-    #         if request.user != profile.user:
-    #             return Response({'detail': 'Forbidden: not the owner of this profile.'}, status=status.HTTP_403_FORBIDDEN)
-
-    #         serializer = self.get_serializer(profile, data=request.data, partial=True)  # partial=True für PATCH
-    #         serializer.is_valid(raise_exception=True)  # 400 bei Validierungsfehlern (DRF macht das automatisch)
-    #         serializer.save()  # speichert Profil + Userfelder (first/last/email)
-    #         return Response(serializer.data, status=status.HTTP_200_OK)  # 200 inkl. gewünschter Struktur
-    #     except Exception:
-    #         return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # 500 Fallback
 
 
 class BusinessProfileListView(ListAPIView):                         # GET /api/profiles/business/
@@ -100,9 +67,6 @@ class CustomerProfileListView(ListAPIView):                         # GET /api/p
     queryset = Profile.objects.select_related('user').filter(type='customer')  # nur Customer-Profile
     
     
-# ------------------------------------------------------------
-# <<< CHANGE: neue kombinierte View-Klasse für LIST + CREATE
-# ------------------------------------------------------------
 class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView/ListAPIView)
     parser_classes = (JSONParser, MultiPartParser, FormParser)  # <<< NEW: JSON + FormData (Bild)
     pagination_class = OfferPageNumberPagination  # wie gehabt
@@ -178,8 +142,6 @@ class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView
     
 
 
-# 404 bei unbekannter ID macht DRF automatisch (RetrieveAPIView).
-# 500 fängt dein globaler Exception-Handler ab (in Settings konfiguriert) — du hast dort einen Custom-Handler vorgesehen (in deinen Settings ist ein Custom-Pfad hinterlegt; das allgemeine Prinzip kommt aus deiner exceptions.py Vorlage ).
 class OfferRetrieveView(RetrieveAPIView):                                  # <<< NEW: GET /api/offers/<pk>/
     permission_classes = [IsAuthenticated]                                 # 401, wenn nicht eingeloggt (Anforderung)
     serializer_class = OfferRetrieveSerializer                             # benutzt absoluten URL-Serializer
@@ -202,24 +164,12 @@ class OfferRetrieveView(RetrieveAPIView):                                  # <<<
         )
         
 
-# ------------------------------------------------------------
-# <<< NEW: GET /api/offerdetails/<pk>/  (auth-pflichtig)
-# ------------------------------------------------------------
-# Der GET-Endpoint soll (wie zuvor) details als id+absolute URL liefern → OfferRetrieveSerializer.
-# Der PATCH-Response soll volle Detailobjekte zurückgeben → OfferPatchResponseSerializer.
-# Owner-Check über deine Permission IsOwnerOrReadOnly (objektbezogen: obj.user_id == request.user.id) .
-# 401/403/404/500 verhalten sich damit exakt wie gefordert; 500 deckt dein globaler Handler ab (Settings + exceptions) .
 class OfferDetailRetrieveView(RetrieveAPIView):                     # Einzelnes Angebotsdetail abrufen
     permission_classes = [IsAuthenticated]                          # 401 falls nicht eingeloggt (Vorgabe)
     serializer_class = OfferDetailRetrieveSerializer                # Ausgabeformat laut Spezifikation
     queryset = OfferDetail.objects.all()                            # 404 bei unbekannter ID handled DRF automatisch
     
     
-# ------------------------------------------------------------
-# <<< CHANGE: OfferRetrieveView → RetrieveUpdateAPIView (GET + PATCH)
-# ------------------------------------------------------------
-# 404 bei unbekannter ID macht DRF automatisch (Retrieve/DestroyAPIView).
-# 500 fängt dein globaler Exception-Handler ab (in Settings konfiguriert).
 class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch PATCH + DELETE
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]  # CHANGE: Owner-Gate für Write/DELETE, 401: nicht eingeloggt, 403: nicht der Owner (nur Ersteller darf löschen/ändern)
     serializer_class = OfferRetrieveSerializer  # GET nutzt weiterhin die Detailausgabe (mit absoluten URLs)
@@ -259,11 +209,6 @@ class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch
         return Response(out.data, status=status.HTTP_200_OK)
     
     
-# --- NEU: GET /api/orders/ ----------------------------------------------------
-# permission_classes = [IsAuthenticated] → exakt deine Anforderung „Benutzer muss authentifiziert sein“ (sonst 401).
-# get_queryset() filtert streng: nur Orders, wo request.user Kunde oder Business ist.
-# order_by('-created_at') sortiert sinnvoll.
-# 500-Fehler werden (wie bei deinen anderen Views) von deinem globalen Handler aufgefangen.
 class OrderListView(ListAPIView):
     # Nur eingeloggte Nutzer → 401 wenn nicht authentifiziert
     permission_classes = [IsAuthenticated]
@@ -271,24 +216,17 @@ class OrderListView(ListAPIView):
     serializer_class = OrderListSerializer
 
     def get_queryset(self):
-        # aktueller User aus dem Request
         user = self.request.user
 
-        # Filter: Bestellungen, an denen der User beteiligt ist (als Kunde ODER als Business)
         qs = (
             Order.objects
             .filter(Q(customer_user=user) | Q(business_user=user))
             .order_by('-created_at')   # neueste zuerst (komfortabel für die Liste)
         )
-
-        # .distinct() wäre nur nötig, falls Joins Duplikate erzeugen – hier nicht, also weggelassen
         return qs
     
 
   
-# OrderListSerializer existiert und liefert genau die Felder, die du im Response-Format sehen willst (IDs, Titel, Preis, Features, offer_type, Status & Timestamps).
-# Order-Modell enthält exakt diese Spalten und Default-Status (in_progress), die beim Create gesetzt werden.
-# OfferDetail besitzt alle benötigten Felder (title, revisions, delivery_time_in_days, price, features, offer_type) und den Link zum Offer, damit wir offer.user als business_user verwenden können. (Siehe deine Modelle/Dumps – neuere Details haben diese Felder bereits; ältere haben ggf. nur name/delivery_time, die ich sauber abfange.)
 class OrderListCreateView(ListCreateAPIView):
     # GET & POST auf demselben Pfad
     permission_classes = [IsAuthenticated]        # 401 falls nicht eingeloggt
@@ -310,12 +248,9 @@ class OrderListCreateView(ListCreateAPIView):
         )
 
     def create(self, request, *args, **kwargs):
-        # 1) Eingabe prüfen (nur offer_detail_id erlaubt)
-        in_serializer = self.get_serializer(data=request.data)   # nutzt OrderCreateInputSerializer
-        in_serializer.is_valid(raise_exception=True)             # 400 bei Fehlern
-        offer_detail_id = in_serializer.validated_data['offer_detail_id']  # geprüfte ID
-
-        # 2) Typ-Prüfung: nur 'customer' darf bestellen (403 sonst)
+        in_serializer = self.get_serializer(data=request.data)
+        in_serializer.is_valid(raise_exception=True)          
+        offer_detail_id = in_serializer.validated_data['offer_detail_id']
         try:
             profile = Profile.objects.get(user=request.user)     # Profil zum eingeloggten User holen
         except Profile.DoesNotExist:
@@ -330,17 +265,12 @@ class OrderListCreateView(ListCreateAPIView):
         except OfferDetail.DoesNotExist:
             return Response({'detail': 'OfferDetail nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 4) Business = Ersteller des Offers (offer.user)
         business_user = detail.offer.user                        # Dienstleister
         customer_user = request.user                             # aktueller Kunde
-
-        # Optional: Kunde darf nicht sein eigenes Offer bestellen (falls gewünscht)
         if business_user_id := getattr(business_user, 'id', None):
             if business_user_id == customer_user.id:
                 return Response({'detail': 'Eigene Angebote können nicht bestellt werden.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 5) Felder aus OfferDetail in Order "einfrieren" (Titel/Preis/Features/…)
-        #    Deine Order-DB erwartet genau diese Felder (siehe Modell). :contentReference[oaicite:1]{index=1}
         order = Order.objects.create(
             customer_user=customer_user,                         # FK Kunde
             business_user=business_user,                         # FK Dienstleister
@@ -358,25 +288,6 @@ class OrderListCreateView(ListCreateAPIView):
         return Response(out.data, status=status.HTTP_201_CREATED)
     
     
-# Auth + Typ: IsAuthenticated + IsBusinessUser (du hast die Permission schon verdrahtet).
-# Owner-Check: order.business_user_id == request.user.id – nur der Dienstleister der Order darf updaten.
-# Antwort: voller Datensatz via OrderListSerializer, genau wie bei GET /api/orders/.
-# updated_at kommt automatisch aus auto_now.
-# class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
-# — erweitert die View um DELETE neben Retrieve/Update. (Deine Imports enthalten die Klasse schon. )
-# permission_classes = [IsAuthenticated]
-# — jede Aktion (GET/PATCH/DELETE) erfordert Login → 401, wenn nicht eingeloggt. (Konsistent zu deiner bisherigen View, die wir nur erweitern. )
-# get_serializer_class
-# — für PATCH den OrderStatusPatchSerializer (nur status), ansonsten OrderListSerializer (volle Order). (Dies hattest du schon so – bleibt unverändert. )
-# update(...) Block
-# — unverändert bis auf Klarheit/Kommentare: blockt PUT, prüft Business-Rolle, Ownership (nur zuständiger Business darf patchen), erlaubt nur Feld status, validiert & speichert und liefert volle Order zurück. (So haben wir deinen Patch-Endpoint zuvor gebaut und erfolgreich getestet. )
-# delete(...)
-# — neu:
-# Prüft Staff via request.user.is_staff → sonst 403.
-# Holt Order (404 bei falscher ID).
-# Löscht mit perform_destroy.
-# Antwortet mit 204 No Content – exakt deine Vorgabe.
-# Keine Änderung an deiner urls.py nötig, denn die Route /api/orders/<pk>/ zeigt bereits auf diese View (du nutzt sie für PATCH). Jetzt akzeptiert die gleiche URL auch DELETE.
 class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()               # Basis-Query
     permission_classes = [IsAuthenticated]       # Auth-Pflicht (401 sonst)
@@ -404,51 +315,27 @@ class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
         if order.business_user_id != request.user.id:
             return Response({'detail': 'Forbidden: nicht der Besitzer dieser Bestellung.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 4) Nur 'status' erlauben
-        # allowed_keys = {'status'}
-        # extra_keys = set(request.data.keys()) - allowed_keys
-        # if extra_keys:
-        #     return Response({'detail': 'Nur das Feld "status" ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
         serializer = self.get_serializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-
-        # 5) Validieren & speichern
         serializer = self.get_serializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-
-        # 6) Vollständige Order als Antwort (wie GET)
         out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
-        # 1) Auth ist bereits Pflicht (permission_classes) → 401 sonst
-        # 2) Staff-Check: nur Admin/Staff darf löschen
         if not request.user.is_staff:
             return Response({'detail': 'Nur Staff-Benutzer dürfen Bestellungen löschen.'}, status=status.HTTP_403_FORBIDDEN)
-
-        # 3) Objekt finden (404 bei Nichtfinden)
         obj = self.get_object()
-
-        # 4) Löschen
         self.perform_destroy(obj)
-
-        # 5) Kein Inhalt zurückgeben (204)
         return Response(status=status.HTTP_204_NO_CONTENT)
     
 
-# permission_classes = [IsAuthenticated]: Ohne Token → 401 (wie von dir überall konsistent umgesetzt).
-# User.objects.get(pk=business_user_id): validiert, dass es den User gibt → sonst 404.
-# Profile.objects.filter(...).first() und profile.type != 'business': wir prüfen, dass es wirklich ein Business-Profil ist, sonst 404 gemäß Vorgabe.
-# Order.objects.filter(business_user_id=..., status='in_progress').count(): zählt nur laufende Bestellungen. Deine Order-Model/Serializer-Umgebung kennst du bereits aus den bestehenden Endpoints.
 class OrderInProgressCountView(APIView):
-    # Nur eingeloggte Nutzer → sonst 401
     permission_classes = [IsAuthenticated]
 
-    # GET /api/order-count/<business_user_id>/
     def get(self, request, business_user_id):
-        # 1) Existiert der User?
         try:
             user = User.objects.get(pk=business_user_id)       # User mit der ID laden
         except User.DoesNotExist:
@@ -469,10 +356,8 @@ class OrderInProgressCountView(APIView):
     
     
 class CompletedOrderCountView(APIView):
-    # Nur eingeloggte Nutzer → sonst 401
     permission_classes = [IsAuthenticated]
 
-    # GET /api/completed-order-count/<business_user_id>/
     def get(self, request, business_user_id):
         # 1) Existiert der User?
         try:
@@ -501,7 +386,6 @@ class CompletedOrderCountView(APIView):
         return Response({'completed_order_count': count}, status=status.HTTP_200_OK)
     
     
-# --- GET /api/reviews/ --------------------------------------------------------
 class ReviewListView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]     # 401 wenn nicht eingeloggt
     pagination_class = None                    # flache Liste, nicht paginiert
