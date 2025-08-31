@@ -1,5 +1,7 @@
+from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404  # 404-Helfer
 from django.db.models import Min, Q, Case, When, F, IntegerField  # Aggregation + Suche
+from rest_framework.views import APIView
 from rest_framework.generics import (
     ListAPIView, 
     RetrieveUpdateAPIView, 
@@ -432,3 +434,33 @@ class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
 
         # 5) Kein Inhalt zurückgeben (204)
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+
+# permission_classes = [IsAuthenticated]: Ohne Token → 401 (wie von dir überall konsistent umgesetzt).
+# User.objects.get(pk=business_user_id): validiert, dass es den User gibt → sonst 404.
+# Profile.objects.filter(...).first() und profile.type != 'business': wir prüfen, dass es wirklich ein Business-Profil ist, sonst 404 gemäß Vorgabe.
+# Order.objects.filter(business_user_id=..., status='in_progress').count(): zählt nur laufende Bestellungen. Deine Order-Model/Serializer-Umgebung kennst du bereits aus den bestehenden Endpoints.
+class OrderInProgressCountView(APIView):
+    # Nur eingeloggte Nutzer → sonst 401
+    permission_classes = [IsAuthenticated]
+
+    # GET /api/order-count/<business_user_id>/
+    def get(self, request, business_user_id):
+        # 1) Existiert der User?
+        try:
+            user = User.objects.get(pk=business_user_id)       # User mit der ID laden
+        except User.DoesNotExist:
+            # Vorgabe: 404, wenn kein Geschäftsnutzer mit dieser ID existiert
+            return Response({'detail': 'Kein Geschäftsnutzer mit dieser ID gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2) Ist es wirklich ein Business-Profil?
+        profile = Profile.objects.filter(user=user).first()     # Profil holen (falls vorhanden)
+        if not profile or profile.type != 'business':
+            # Kein Business-User → wie „nicht gefunden“ behandeln
+            return Response({'detail': 'Kein Geschäftsnutzer mit dieser ID gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 3) Anzahl laufender Bestellungen zählen (Status = in_progress)
+        count = Order.objects.filter(business_user_id=business_user_id, status='in_progress').count()
+
+        # 4) Erfolgreiche Antwort
+        return Response({'order_count': count}, status=status.HTTP_200_OK)
