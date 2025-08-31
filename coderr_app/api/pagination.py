@@ -7,3 +7,10 @@ class OfferPageNumberPagination(PageNumberPagination):
     # Query-Param, um Seitengröße zur Laufzeit zu setzen (vom Frontend steuerbar)
     page_size_query_param = 'page_size'  # wie in der Anforderung
     max_page_size = 100  # Sicherheitslimit gegen zu große Seiten
+    
+    
+# --- Reviews Pagination --------------------------------------------------------
+class ReviewPageNumberPagination(PageNumberPagination):
+    page_size = 10                           # Default
+    page_size_query_param = 'page_size'      # vom Frontend steuerbar
+    max_page_size = 100                      # Limit

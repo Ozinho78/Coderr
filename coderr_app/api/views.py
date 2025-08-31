@@ -16,8 +16,8 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
 from auth_app.models import Profile
-from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
-from coderr_app.models import Offer, OfferDetail, Order
+from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer, ReviewListSerializer
+from coderr_app.models import Offer, OfferDetail, Order, Review
 from coderr_app.api.serializers import (
     OfferListSerializer, 
     OfferCreateSerializer, 
@@ -29,7 +29,7 @@ from coderr_app.api.serializers import (
     OrderCreateInputSerializer,
     OrderStatusPatchSerializer
 )
-from coderr_app.api.pagination import OfferPageNumberPagination
+from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumberPagination
 
 
 
@@ -497,3 +497,42 @@ class CompletedOrderCountView(APIView):
 
         # 4) Erfolgreiche Antwort
         return Response({'completed_order_count': count}, status=status.HTTP_200_OK)
+    
+    
+# --- GET /api/reviews/ --------------------------------------------------------
+class ReviewListView(ListAPIView):
+    permission_classes = [IsAuthenticated]                 # 401 sonst
+    serializer_class = ReviewListSerializer                # Felder wie gefordert
+    pagination_class = ReviewPageNumberPagination          # optional (s.o.)
+
+    def get_queryset(self):
+        # Basis: alle Reviews, sinnvolle Standard-Sortierung
+        qs = Review.objects.all().order_by('-updated_at')
+
+        # Query-Parameter lesen
+        params = self.request.query_params
+
+        # business_user_id (int) filter
+        business_user_id = params.get('business_user_id')
+        if business_user_id:
+            if not str(business_user_id).isdigit():
+                raise ValidationError({'business_user_id': 'Muss eine ganze Zahl sein.'})
+            qs = qs.filter(business_user_id=int(business_user_id))
+
+        # reviewer_id (int) filter
+        reviewer_id = params.get('reviewer_id')
+        if reviewer_id:
+            if not str(reviewer_id).isdigit():
+                raise ValidationError({'reviewer_id': 'Muss eine ganze Zahl sein.'})
+            qs = qs.filter(reviewer_id=int(reviewer_id))
+
+        # ordering: 'updated_at' oder 'rating' (ohne Minus laut Vorgabe)
+        ordering = params.get('ordering')
+        if ordering:
+            allowed = {'updated_at', 'rating'}
+            if ordering not in allowed:
+                raise ValidationError({'ordering': 'Ungültig: updated_at oder rating'})
+            qs = qs.order_by(ordering)  # aufsteigend
+        # sonst Default: '-updated_at' (neueste zuerst)
+
+        return qs

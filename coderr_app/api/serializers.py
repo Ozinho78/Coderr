@@ -1,8 +1,8 @@
 from rest_framework import serializers  # DRF-Serializer-Basis
 from django.contrib.auth import get_user_model  # kompatibel auch für CustomUser
-from auth_app.models import Profile  # unser Profilmodell (aus auth_app)
+from auth_app.models import Profile
 import os  # für Dateinamen von file
-from coderr_app.models import Offer, OfferDetail, Order  # unsere neuen Modelle
+from coderr_app.models import Offer, OfferDetail, Order, Review
 
 User = get_user_model()  # Referenz auf das Usermodell
 
@@ -525,3 +525,27 @@ class OrderStatusPatchSerializer(serializers.Serializer):
         # updated_at wird dank auto_now aktualisiert
         instance.save(update_fields=['status', 'updated_at'])
         return instance
+    
+    
+class ReviewListSerializer(serializers.ModelSerializer):
+    # Wir geben nur IDs aus (kein Nested-Objekt → wie in deiner Vorgabe)
+    business_user = serializers.PrimaryKeyRelatedField(read_only=True)  # int
+    reviewer = serializers.PrimaryKeyRelatedField(read_only=True)       # int
+
+    class Meta:
+        model = Review
+        fields = ('id', 'business_user', 'reviewer', 'rating', 'description', 'created_at', 'updated_at')
+
+    # Sicherheits-/Daten-Validierung (falls du später POST zulässt; fürs GET unschädlich)
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating muss zwischen 1 und 5 liegen.')
+        return value
+
+    def validate(self, attrs):
+        # Schutz gegen Selbstbewertung (falls später POST kommt)
+        business = attrs.get('business_user') or getattr(self.instance, 'business_user', None)
+        reviewer = attrs.get('reviewer') or getattr(self.instance, 'reviewer', None)
+        if business and reviewer and getattr(business, 'id', None) == getattr(reviewer, 'id', None):
+            raise serializers.ValidationError({'non_field_errors': ['Reviewer darf sich nicht selbst bewerten.']})
+        return attrs

@@ -104,3 +104,29 @@ class Order(models.Model):
     def __str__(self):
         # lesbare Repräsentation im Admin/Shell
         return f'Order #{self.pk} ({self.title}) c={self.customer_user_id} b={self.business_user_id}'
+    
+    
+# --- Reviews: Customer bewertet Business --------------------------------------
+class Review(models.Model):
+    # Wer wird bewertet? → Business-User (FK auf User)
+    business_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_reviews')  # Business, der bewertet wird
+    # Wer bewertet? → Reviewer (FK auf User)
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='written_reviews')        # Customer, der bewertet
+    # 1..5 Sterne
+    rating = models.PositiveSmallIntegerField()                                                         # int 1..5, validieren im Serializer
+    # Freitext
+    description = models.TextField(blank=True)                                                          # optionaler Text
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)                                                # gesetzt beim Erstellen
+    updated_at = models.DateTimeField(auto_now=True)                                                    # bei jeder Änderung
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['business_user']),                                                     # schneller filtern nach Business
+            models.Index(fields=['reviewer']),                                                          # schneller filtern nach Reviewer
+            models.Index(fields=['updated_at']),                                                        # schneller sortieren
+            models.Index(fields=['rating']),                                                            # schneller sortieren
+        ]
+
+    def __str__(self):
+        return f'Review #{self.pk} b={self.business_user_id} r={self.reviewer_id} rating={self.rating}'

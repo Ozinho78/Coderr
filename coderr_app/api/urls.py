@@ -11,6 +11,7 @@ from coderr_app.api.views import (
     OrderStatusUpdateView,
     OrderInProgressCountView,
     CompletedOrderCountView,
+    ReviewListView,
 )
 
 
@@ -26,6 +27,7 @@ urlpatterns = [
     path('orders/<int:pk>/', OrderStatusUpdateView.as_view(), name='orders-status-update'),
     path('order-count/<int:business_user_id>/', OrderInProgressCountView.as_view(), name='orders-in-progress-count'),
     path('completed-order-count/<int:business_user_id>/', CompletedOrderCountView.as_view(), name='orders-completed-count'),
+    path('reviews/', ReviewListView.as_view(), name='reviews-list'),  # GET /api/reviews/
 ]
 
 
