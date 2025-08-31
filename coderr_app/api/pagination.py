@@ -1,16 +1,14 @@
-from rest_framework.pagination import PageNumberPagination  # Basis-Pagination-Klasse
+from rest_framework.pagination import PageNumberPagination
 
 class OfferPageNumberPagination(PageNumberPagination):
-    # Standard-Seitengröße (Fallback, falls kein page_size-Query-Param kommt)
-    page_size = 10  # sinnvoller Default; Frontend kann 'page_size' überschreiben
+    """Defines pagination for Offer"""
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+    
 
-    # Query-Param, um Seitengröße zur Laufzeit zu setzen (vom Frontend steuerbar)
-    page_size_query_param = 'page_size'  # wie in der Anforderung
-    max_page_size = 100  # Sicherheitslimit gegen zu große Seiten
-    
-    
-# --- Reviews Pagination --------------------------------------------------------
 class ReviewPageNumberPagination(PageNumberPagination):
-    page_size = 10                           # Default
-    page_size_query_param = 'page_size'      # vom Frontend steuerbar
-    max_page_size = 100                      # Limit
+    """Defines pagination for Review"""
+    page_size = 10                  
+    page_size_query_param = 'page_size'
+    max_page_size = 100                
