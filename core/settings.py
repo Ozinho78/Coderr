@@ -10,15 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path # Pfad-Objekte statt Strings
-import os  # für Pfadfunktionen
-import logging # Python-Logging
+from pathlib import Path
+import os
+import logging
 from logging.handlers import RotatingFileHandler
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent      # dein vorhandenes BASE_DIR (→ Projekt-Root)
-LOG_DIR = BASE_DIR / 'logs'                            # logs/ direkt im Projekt-Root
-LOG_DIR.mkdir(exist_ok=True)                           # Ordner anlegen, falls nicht vorhanden
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -44,8 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
-    # 'auth_app',
-    'auth_app.apps.AuthAppConfig',  # nutzt die AppConfig mit ready() -> lädt signals
+    'auth_app.apps.AuthAppConfig',
     'coderr_app',
     'corsheaders',
 ]
@@ -56,7 +54,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
-    'EXCEPTION_HANDLER': 'core.utils.exceptions.exception_handler_status500',   # customized exceptions handling for any unexpected error
+    'EXCEPTION_HANDLER': 'core.utils.exceptions.exception_handler_status500',
 }
 
 MIDDLEWARE = [
@@ -150,7 +148,7 @@ MEDIA_URL = '/media/'
 
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,                 # bestehende Logger nicht abschalten
+    'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
             'format': '%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s',
@@ -161,9 +159,9 @@ LOGGING = {
         'app_file': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': str(LOG_DIR / 'django.log'),  # → <projekt-root>/logs/django.log
-            'maxBytes': 5 * 1024 * 1024,              # 5 MB pro Datei
-            'backupCount': 5,                          # bis zu 5 Rotationen
+            'filename': str(LOG_DIR / 'django.log'),
+            'maxBytes': 5 * 1024 * 1024,            
+            'backupCount': 5,                       
             'encoding': 'utf-8',
             'formatter': 'verbose',
         },
@@ -178,21 +176,17 @@ LOGGING = {
         },
     },
     'loggers': {
-        # alle App-Logs (root)
         '': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': False},
-        # Django-Core
         'django': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': True},
         'django.request': {'handlers': ['request_file'], 'level': 'INFO', 'propagate': False},
         'django.db.backends': {'handlers': ['app_file'], 'level': 'WARNING', 'propagate': False},
-        # optional: DRF
         'rest_framework': {'handlers': ['app_file'], 'level': 'INFO', 'propagate': False},
     }
 }
 
 # CORS Einstellungen
-CORS_ALLOW_ALL_ORIGINS = True   # erlaubt alle Domains (für Entwicklung praktisch)
-# oder spezifisch:
+CORS_ALLOW_ALL_ORIGINS = True
 # CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",
-#     "http://127.0.0.1:3000",
+#     "http://localhost:8000",
+#     "http://127.0.0.1:8000",
 # ]
