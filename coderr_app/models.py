@@ -59,3 +59,48 @@ class OfferDetail(models.Model):
         return f'OfferDetail #{self.pk} of Offer #{self.offer_id} (price={self.price}, days={self.delivery_time})'
 
 
+
+
+# class Order(models.Model): definiert die DB-Tabelle.
+# Zwei ForeignKey zeigen auf dein User-Modell: Kunde und Business.
+# Die Felder title, revisions, delivery_time_in_days, price, features, offer_type spiegeln exakt die Struktur aus deiner Vorgabe.
+# status hat sinnvolle Choices, Default ist 'in_progress' (wie im Beispiel).
+# created_at / updated_at pflegen sich automatisch.
+# __str__ hilft beim Debuggen.
+# Falls du später eine Referenz zur konkreten Offer/OfferDetail-ID brauchst, kannst du optional offer = models.ForeignKey(Offer, ...) oder offer_detail = models.ForeignKey(OfferDetail, ...) ergänzen. Für GET /api/orders/ ist das nicht nötig.
+class Order(models.Model):
+    # Referenzen auf die beteiligten User
+    customer_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customer_orders')  # Kunde (löscht Kunde -> löscht Bestellung)
+    business_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='business_orders')  # Dienstleister (löscht Business -> löscht Bestellung)
+
+    # Angebots-Metadaten (werden beim Kauf "eingefroren")
+    title = models.CharField(max_length=255)                                 # Titel der gebuchten Option
+    revisions = models.PositiveIntegerField(default=0)                        # zugesicherte Revisionen
+    delivery_time_in_days = models.PositiveIntegerField()                     # Lieferzeit in Tagen
+    price = models.DecimalField(max_digits=10, decimal_places=2)              # Preis zum Kaufzeitpunkt
+    features = models.JSONField(default=list, blank=True, null=True)          # Feature-Liste (Strings)
+    offer_type = models.CharField(                                           # Pakettyp gemäß Vorgabe
+        max_length=20,
+        choices=(('basic', 'Basic'), ('standard', 'Standard'), ('premium', 'Premium'))
+    )
+
+    # Status der Bestellung
+    status = models.CharField(                                               # einfacher State-String
+        max_length=30,
+        choices=(
+            ('pending', 'Pending'),
+            ('in_progress', 'In Progress'),
+            ('delivered', 'Delivered'),
+            ('completed', 'Completed'),
+            ('cancelled', 'Cancelled'),
+        ),
+        default='in_progress',
+    )
+
+    # Zeitstempel
+    created_at = models.DateTimeField(auto_now_add=True)                      # beim Erstellen gesetzt
+    updated_at = models.DateTimeField(auto_now=True)                          # bei jeder Änderung gesetzt
+
+    def __str__(self):
+        # lesbare Repräsentation im Admin/Shell
+        return f'Order #{self.pk} ({self.title}) c={self.customer_user_id} b={self.business_user_id}'

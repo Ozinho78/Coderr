@@ -1,18 +1,29 @@
 from django.shortcuts import get_object_or_404  # 404-Helfer
 from django.db.models import Min, Q, Case, When, F, IntegerField  # Aggregation + Suche
-from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView, ListCreateAPIView  # DRF-Generic für Listen, GET+PATCH
+from rest_framework.generics import (
+    ListAPIView, 
+    RetrieveUpdateAPIView, 
+    RetrieveAPIView,
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly  # Auth-Pflicht
 from rest_framework.exceptions import ValidationError  # für 400-Fehler
 from rest_framework.response import Response  # HTTP-Antwort
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from rest_framework.generics import RetrieveAPIView  # <<< NEW: Einzelabruf eines Objekts
-from rest_framework.generics import RetrieveUpdateDestroyAPIView  # <<< NEW: GET + PATCH + DELETE
 from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
 from auth_app.models import Profile
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
-from coderr_app.models import Offer, OfferDetail
-from coderr_app.api.serializers import OfferListSerializer, OfferCreateSerializer, OfferRetrieveSerializer, OfferDetailRetrieveSerializer, OfferUpdateSerializer, OfferPatchResponseSerializer
+from coderr_app.models import Offer, OfferDetail, Order
+from coderr_app.api.serializers import (
+    OfferListSerializer, 
+    OfferCreateSerializer, 
+    OfferRetrieveSerializer, 
+    OfferDetailRetrieveSerializer, 
+    OfferUpdateSerializer, 
+    OfferPatchResponseSerializer, 
+    OrderListSerializer)
 from coderr_app.api.pagination import OfferPageNumberPagination
 
 
@@ -241,3 +252,27 @@ class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch
         return Response(out.data, status=status.HTTP_200_OK)
     
     
+# --- NEU: GET /api/orders/ ----------------------------------------------------
+# permission_classes = [IsAuthenticated] → exakt deine Anforderung „Benutzer muss authentifiziert sein“ (sonst 401).
+# get_queryset() filtert streng: nur Orders, wo request.user Kunde oder Business ist.
+# order_by('-created_at') sortiert sinnvoll.
+# 500-Fehler werden (wie bei deinen anderen Views) von deinem globalen Handler aufgefangen.
+class OrderListView(ListAPIView):
+    # Nur eingeloggte Nutzer → 401 wenn nicht authentifiziert
+    permission_classes = [IsAuthenticated]
+    # Serializer bestimmt das Antwortformat
+    serializer_class = OrderListSerializer
+
+    def get_queryset(self):
+        # aktueller User aus dem Request
+        user = self.request.user
+
+        # Filter: Bestellungen, an denen der User beteiligt ist (als Kunde ODER als Business)
+        qs = (
+            Order.objects
+            .filter(Q(customer_user=user) | Q(business_user=user))
+            .order_by('-created_at')   # neueste zuerst (komfortabel für die Liste)
+        )
+
+        # .distinct() wäre nur nötig, falls Joins Duplikate erzeugen – hier nicht, also weggelassen
+        return qs

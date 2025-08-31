@@ -2,7 +2,7 @@ from rest_framework import serializers  # DRF-Serializer-Basis
 from django.contrib.auth import get_user_model  # kompatibel auch für CustomUser
 from auth_app.models import Profile  # unser Profilmodell (aus auth_app)
 import os  # für Dateinamen von file
-from coderr_app.models import Offer, OfferDetail  # unsere neuen Modelle
+from coderr_app.models import Offer, OfferDetail, Order  # unsere neuen Modelle
 
 User = get_user_model()  # Referenz auf das Usermodell
 
@@ -446,3 +446,26 @@ class OfferPatchResponseSerializer(serializers.ModelSerializer):
         )
         
         
+# PrimaryKeyRelatedField(read_only=True) sorgt dafür, dass IDs (nicht verschachtelte Objekte) ausgegeben werden – exakt wie in deiner Response-Vorgabe.
+# fields decken 1:1 die geforderten Felder ab.
+class OrderListSerializer(serializers.ModelSerializer):
+    # Wir wollen reine IDs zurückgeben (passt zur Vorgabe)
+    customer_user = serializers.PrimaryKeyRelatedField(read_only=True)
+    business_user = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Order
+        fields = (
+            'id',
+            'customer_user',
+            'business_user',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type',
+            'status',
+            'created_at',
+            'updated_at',
+        )
