@@ -9,12 +9,12 @@ def test_normalize_offerdetails_command(business_user):
         offer=offer,
         price='10.00',
         delivery_time=4,
-        name='Basic',           # alt
-        title='',               # leer
-        offer_type='',          # leer
-        delivery_time_in_days=None,
-        revisions=None,
-        features=None,
+        name='Basic',            # alt
+        title='',                # leer
+        offer_type='',           # leer
+        delivery_time_in_days=None,  # das kann i. d. R. None sein; wenn dein Feld NOT NULL ist, setze hier '4'
+        revisions=0,             # <<< HIER statt None, damit INSERT nicht scheitert
+        features=None,           # bleibt None; der Command setzt dann []
     )
     # Dry-run
     call_command('normalize_offerdetails', '--dry-run')

@@ -90,25 +90,31 @@ def test_post_orders_201_old_schema_fallbacks(client, customer_user, auth_header
     # offer_type = offer_type or name.lower() or 'basic'
     assert data['offer_type'] in ('standard', 'basic')
 
+
 @pytest.mark.django_db
-def test_get_orders_only_own(client, customer_user, business_user, auth_header_for, sample_offerdetail_new_schema):
-    # 1) Kunde legt eine Order an
+def test_get_orders_only_own(client, customer_user, business_user, another_business_user, auth_header_for, sample_offerdetail_new_schema):
     url = reverse('orders-list-create')
+
+    # 1) Kunde legt eine Order an
     headers = auth_header_for(customer_user)
     payload = {'offer_detail_id': sample_offerdetail_new_schema.id}
     res = client.post(url, data=json.dumps(payload), content_type='application/json', **headers)
     assert res.status_code == 201
     order_id = res.json()['id']
 
-    # 2) Kunde sieht die Order in GET
+    # 2) Kunde sieht die Order
     res_get = client.get(url, **headers)
     assert res_get.status_code == 200
-    ids = [o['id'] for o in res_get.json()]
+    data = res_get.json()
+    items = data['results'] if isinstance(data, dict) and 'results' in data else data
+    ids = [o['id'] for o in items]
     assert order_id in ids
 
-    # 3) Ein völlig Unbeteiligter (anderer Business) darf sie nicht in seiner Liste sehen
-    other_headers = auth_header_for(business_user)
+    # 3) Ein völlig Unbeteiligter Business (NICHT der Offer-Ersteller) sieht sie NICHT
+    other_headers = auth_header_for(another_business_user)  # <<< statt business_user
     res_get_other = client.get(url, **other_headers)
     assert res_get_other.status_code == 200
-    other_ids = [o['id'] for o in res_get_other.json()]
+    other_data = res_get_other.json()
+    other_items = other_data['results'] if isinstance(other_data, dict) and 'results' in other_data else other_data
+    other_ids = [o['id'] for o in other_items]
     assert order_id not in other_ids
