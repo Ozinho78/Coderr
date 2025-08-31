@@ -358,9 +358,24 @@ class OrderListCreateView(ListCreateAPIView):
 # Owner-Check: order.business_user_id == request.user.id – nur der Dienstleister der Order darf updaten.
 # Antwort: voller Datensatz via OrderListSerializer, genau wie bei GET /api/orders/.
 # updated_at kommt automatisch aus auto_now.
-class OrderStatusUpdateView(RetrieveUpdateAPIView):
+# class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
+# — erweitert die View um DELETE neben Retrieve/Update. (Deine Imports enthalten die Klasse schon. )
+# permission_classes = [IsAuthenticated]
+# — jede Aktion (GET/PATCH/DELETE) erfordert Login → 401, wenn nicht eingeloggt. (Konsistent zu deiner bisherigen View, die wir nur erweitern. )
+# get_serializer_class
+# — für PATCH den OrderStatusPatchSerializer (nur status), ansonsten OrderListSerializer (volle Order). (Dies hattest du schon so – bleibt unverändert. )
+# update(...) Block
+# — unverändert bis auf Klarheit/Kommentare: blockt PUT, prüft Business-Rolle, Ownership (nur zuständiger Business darf patchen), erlaubt nur Feld status, validiert & speichert und liefert volle Order zurück. (So haben wir deinen Patch-Endpoint zuvor gebaut und erfolgreich getestet. )
+# delete(...)
+# — neu:
+# Prüft Staff via request.user.is_staff → sonst 403.
+# Holt Order (404 bei falscher ID).
+# Löscht mit perform_destroy.
+# Antwortet mit 204 No Content – exakt deine Vorgabe.
+# Keine Änderung an deiner urls.py nötig, denn die Route /api/orders/<pk>/ zeigt bereits auf diese View (du nutzt sie für PATCH). Jetzt akzeptiert die gleiche URL auch DELETE.
+class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()               # Basis-Query
-    permission_classes = [IsAuthenticated]       # <<< nur Auth-Pflicht, keine Business-Permission hier
+    permission_classes = [IsAuthenticated]       # Auth-Pflicht (401 sonst)
     lookup_field = 'pk'
     parser_classes = (JSONParser,)               # JSON-Body parsen
 
@@ -381,20 +396,39 @@ class OrderStatusUpdateView(RetrieveUpdateAPIView):
         if not profile or profile.type != 'business':
             return Response({'detail': 'Nur Business-User dürfen den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3) Owner-Check: nur der Business-Owner dieser Order
+        # 3) Ownership: nur der Business-Owner der Order darf updaten
         if order.business_user_id != request.user.id:
-            return Response({'detail': 'Nur der Business-Owner dieser Bestellung darf den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'detail': 'Forbidden: nicht der Besitzer dieser Bestellung.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 4) Eingabe validieren (erlaubt ist NUR 'status', Wert muss in den Choices liegen)
-        serializer = OrderStatusPatchSerializer(order, data=request.data, partial=True)
+        # 4) Nur 'status' erlauben
+        # allowed_keys = {'status'}
+        # extra_keys = set(request.data.keys()) - allowed_keys
+        # if extra_keys:
+        #     return Response({'detail': 'Nur das Feld "status" ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-
-        # 5) Speichern → updated_at wird durch auto_now aktualisiert
         serializer.save()
-        order.refresh_from_db()  # optional
+
+        # 5) Validieren & speichern
+        serializer = self.get_serializer(order, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        # 6) Vollständige Order als Antwort (wie GET)
         out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_200_OK)
 
-        # 6) Komplette Order als Response zurückgeben
-        out = OrderListSerializer(order)
-        return Response(out.data, status=status.HTTP_200_OK)
+    def delete(self, request, *args, **kwargs):
+        # 1) Auth ist bereits Pflicht (permission_classes) → 401 sonst
+        # 2) Staff-Check: nur Admin/Staff darf löschen
+        if not request.user.is_staff:
+            return Response({'detail': 'Nur Staff-Benutzer dürfen Bestellungen löschen.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 3) Objekt finden (404 bei Nichtfinden)
+        obj = self.get_object()
+
+        # 4) Löschen
+        self.perform_destroy(obj)
+
+        # 5) Kein Inhalt zurückgeben (204)
+        return Response(status=status.HTTP_204_NO_CONTENT)

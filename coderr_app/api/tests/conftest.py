@@ -25,6 +25,11 @@ def _ensure_profile(user, type_):
     return profile
 
 @pytest.fixture
+def staff_user(db, django_user_model):
+    u = django_user_model.objects.create_user(username='admin', email='a@x.de', password='pw123456', is_staff=True)
+    return u
+
+@pytest.fixture
 def customer_user(db):
     u = User.objects.create_user(username='cust', password='pw123456', email='c@x.de')
     _ensure_profile(u, 'customer')
