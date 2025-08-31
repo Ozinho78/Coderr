@@ -110,3 +110,10 @@ dump_users.json
 orders.json
 orders_every_second.json
 seed_reviews.py
+
+
+auth_app/api/tests/*
+coderr_app/api/tests/*
+coderr_app/management/commands/*
+# media/*
+pytest.ini

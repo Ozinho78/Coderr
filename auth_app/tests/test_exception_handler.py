@@ -11,10 +11,8 @@ logger = logging.getLogger("core.utils.exceptions")
 def test_unexpected_error_returns_custom_500(caplog):
     client = APIClient()
 
-    # Logging für diesen Test abfangen
     caplog.set_level(logging.CRITICAL, logger="core.utils.exceptions")
 
-    # Mock: Token.objects.get_or_create wirft absichtlich einen Fehler
     with mock.patch.object(Token.objects, "get_or_create", side_effect=RuntimeError("boom")):
         response = client.post("/api/registration/", {
             "username": "errortest",

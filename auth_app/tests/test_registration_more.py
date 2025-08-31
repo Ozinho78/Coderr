@@ -17,7 +17,7 @@ class RegistrationMoreTests(APITestCase):
         }
 
     def test_invalid_type_returns_400(self):
-        payload = {**self.valid, "type": "freelancer"}  # ungültiger Wert
+        payload = {**self.valid, "type": "freelancer"}
         res = self.client.post(self.url, payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("type", res.data)
@@ -40,4 +40,4 @@ class RegistrationMoreTests(APITestCase):
         res = self.client.post(self.url, {**self.valid, "username": "trinity", "email": "trinity@example.com"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         token = res.data.get("token")
-        self.assertTrue(isinstance(token, str) and len(token) >= 10)  # grober Smoke-Test
+        self.assertTrue(isinstance(token, str) and len(token) >= 10)

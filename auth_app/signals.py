@@ -1,21 +1,16 @@
-from django.contrib.auth.models import User                         # User ist der Sender des Signals
-from django.db.models.signals import post_save                      # feuert nach dem Speichern
-from django.dispatch import receiver                                # dekoriert die Handler-Funktion
-from auth_app.models import Profile                                 # dein Profilmodell                 # :contentReference[oaicite:3]{index=3}
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from auth_app.models import Profile
 
-# Faker für fallback-Namen
+
 try:
     from faker import Faker # type: ignore
 except ImportError:
-    Faker = None                                                    # falls nicht installiert, skip Fakes
+    Faker = None
 
 def _guess_names_from_identity(username: str, email: str):
-    """
-    Versucht, Vor-/Nachnamen aus E-Mail/Username zu erraten:
-    - local part der E-Mail splitten (., _, -)
-    - alles alphanumerisch machen, 'familie' o. ä. ignorieren
-    - Title-Case zurückgeben
-    """
+    """Tries to determine the name with given username"""
     import re
     local = (email or '').split('@')[0]
     candidates = [username or '', local]
@@ -24,19 +19,17 @@ def _guess_names_from_identity(username: str, email: str):
     for c in candidates:
         tokens = re.split(r'[._\-]+', c)
         for t in tokens:
-            t = re.sub(r'\d+', '', t)                               # Zahlen streichen
-            t = re.sub(r'[^A-Za-zÀ-ÿ]', '', t)                      # Sonderzeichen raus (Umlaute erlaubt)
+            t = re.sub(r'\d+', '', t)
+            t = re.sub(r'[^A-Za-zÀ-ÿ]', '', t)
             if t and t.lower() not in {'user', 'kunde', 'familie', 'customer', 'business'}:
                 parts.append(t)
-    # Heuristik: erstes Teil = Vorname, letztes Teil = Nachname
+
     first = parts[0].title() if parts else ''
     last = parts[-1].title() if len(parts) > 1 else ''
     return first, last
 
 def _faker_by_email(email: str):
-    """
-    Wählt eine passende Faker-Locale anhand der Domain (einfacher Heuristik).
-    """
+    """Chooses a Faker-Locale looking at the domain"""
     if not Faker:
         return None
     e = email.lower() if email else ''
@@ -46,38 +39,12 @@ def _faker_by_email(email: str):
         return Faker('es_ES')
     return Faker('en_GB')
 
-@receiver(post_save, sender=User)                                   # Handler für User.post_save
+@receiver(post_save, sender=User)
 def create_profile_for_user(sender, instance, created, **kwargs):
-    # nur beim erstmaligen Anlegen reagieren
+    """Creates user profile"""
+
     if not created:
         return
 
-    # Profil sicherstellen – minimal, ohne weitere Felder zu befüllen
     if not hasattr(instance, 'profile'):
-        Profile.objects.create(user=instance, type='customer')      # Default-Typ setzen                 # :contentReference[oaicite:4]{index=4}
-
-    # --- Ab hier deaktivieren, damit bei Registrierung nichts automatisch ergänzt wird ---
-    # --- NEU: fehlende Namen freundlich füllen (einmalig) ---
-    # fn = (instance.first_name or '').strip()
-    # ln = (instance.last_name or '').strip()
-    # if not fn or not ln:
-    #     # 1) Versuch: aus E-Mail/Username ableiten
-    #     guess_fn, guess_ln = _guess_names_from_identity(instance.username or '', instance.email or '')
-    #     # 2) Fallback: Faker (Locale anhand Domain)
-    #     if (not guess_fn or not guess_ln) and Faker:
-    #         f = _faker_by_email(instance.email)
-    #         if f:
-    #             if not guess_fn:
-    #                 guess_fn = f.first_name()
-    #             if not guess_ln:
-    #                 guess_ln = f.last_name()
-    #     # final setzen, wenn etwas bestimmt werden konnte
-    #     changed = False
-    #     if not fn and guess_fn:
-    #         instance.first_name = guess_fn
-    #         changed = True
-    #     if not ln and guess_ln:
-    #         instance.last_name = guess_ln
-    #         changed = True
-    #     if changed:
-    #         instance.save(update_fields=['first_name', 'last_name'])
+        Profile.objects.create(user=instance, type='customer')

@@ -10,7 +10,6 @@ from core.utils.validators import (
 )
 
 
-
 class RegistrationSerializer(serializers.Serializer):
     """Serializes registration data"""
     username = serializers.CharField(max_length=50)
@@ -19,13 +18,11 @@ class RegistrationSerializer(serializers.Serializer):
     repeated_password = serializers.CharField(write_only=True, min_length=8)
     type = serializers.ChoiceField(choices=Profile.TYPE_CHOICES)
 
-    # username check, matching with iexact (i=insensitive) to avoid multiple usernames with upper/lower chars
     def validate_username(self, v):
         if User.objects.filter(username__iexact=v).exists():
             raise serializers.ValidationError("Username ist bereits vergeben.")
         return v
 
-    # checks unique email address
     def validate_email(self, v):
         try:
             validate_email_format(v)
@@ -33,7 +30,6 @@ class RegistrationSerializer(serializers.Serializer):
             if User.objects.filter(email__iexact=v).exists():
                 raise serializers.ValidationError("E-Mail-Adresse wird bereits verwendet.")
         except DRFValidationError as e:
-            # e.detail can be dict/list/string
             if isinstance(e.detail, dict):
                 msg = e.detail.get("email") or e.detail.get("E-Mail") or "Ungültige E-Mail-Adresse."
             else:
@@ -41,7 +37,6 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
         return v
 
-    # validates password strength
     def validate_password(self, v):
         try:
             validate_password_strength(v)
@@ -53,28 +48,24 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
         return v
 
-    # checks equal passwords
     def validate(self, attrs):
         if attrs["password"] != attrs["repeated_password"]:
             raise serializers.ValidationError({"repeated_password": "Passwörter stimmen nicht überein."})
         return attrs
 
     def create(self, validated_data):
-        pwd = validated_data.pop('password')                 # Passwort entnehmen
-        validated_data.pop('repeated_password')              # Wiederholung entfernen
-        desired_type = validated_data['type']                # gewünschter Profil-Typ merken
+        pwd = validated_data.pop('password')
+        validated_data.pop('repeated_password')
+        desired_type = validated_data['type']
 
-        # User anlegen (triggert post_save → Signal kann bereits ein Profil erzeugen)
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=pwd,
         )
 
-        # Profil sicherstellen, ohne Unique-Fehler zu riskieren:
         profile, _ = Profile.objects.get_or_create(user=user)
 
-        # Typ auf gewünschten Wert setzen (alle anderen Felder bleiben leer)
         if profile.type != desired_type:
             profile.type = desired_type
             profile.save(update_fields=['type'])
@@ -94,7 +85,6 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Ungültige Anfragedaten.")
         user = authenticate(username=username, password=password)
         if not user:
-            # absichtlich generisch (kein Leak, ob User existiert)
             raise serializers.ValidationError("Ungültige Anmeldedaten.")
         if not user.is_active:
             raise serializers.ValidationError("Konto ist deaktiviert.")
