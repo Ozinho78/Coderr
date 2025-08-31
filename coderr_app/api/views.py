@@ -11,7 +11,7 @@ from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
 from auth_app.models import Profile
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer
 from coderr_app.models import Offer, OfferDetail
-from coderr_app.api.serializers import OfferListSerializer, OfferCreateSerializer, OfferRetrieveSerializer, OfferDetailRetrieveSerializer
+from coderr_app.api.serializers import OfferListSerializer, OfferCreateSerializer, OfferRetrieveSerializer, OfferDetailRetrieveSerializer, OfferUpdateSerializer, OfferPatchResponseSerializer
 from coderr_app.api.pagination import OfferPageNumberPagination
 
 
@@ -186,7 +186,54 @@ class OfferRetrieveView(RetrieveAPIView):                                  # <<<
 # ------------------------------------------------------------
 # <<< NEW: GET /api/offerdetails/<pk>/  (auth-pflichtig)
 # ------------------------------------------------------------
+# Der GET-Endpoint soll (wie zuvor) details als id+absolute URL liefern → OfferRetrieveSerializer.
+# Der PATCH-Response soll volle Detailobjekte zurückgeben → OfferPatchResponseSerializer.
+# Owner-Check über deine Permission IsOwnerOrReadOnly (objektbezogen: obj.user_id == request.user.id) .
+# 401/403/404/500 verhalten sich damit exakt wie gefordert; 500 deckt dein globaler Handler ab (Settings + exceptions) .
 class OfferDetailRetrieveView(RetrieveAPIView):                     # Einzelnes Angebotsdetail abrufen
     permission_classes = [IsAuthenticated]                          # 401 falls nicht eingeloggt (Vorgabe)
     serializer_class = OfferDetailRetrieveSerializer                # Ausgabeformat laut Spezifikation
     queryset = OfferDetail.objects.all()                            # 404 bei unbekannter ID handled DRF automatisch
+    
+    
+# ------------------------------------------------------------
+# <<< CHANGE: OfferRetrieveView → RetrieveUpdateAPIView (GET + PATCH)
+# ------------------------------------------------------------
+class OfferRetrieveView(RetrieveUpdateAPIView):                          # jetzt auch PATCH möglich
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]           # 401 + 403 (nur Owner darf ändern)
+    serializer_class = OfferRetrieveSerializer                          # Default: GET nutzt diesen Serializer
+
+    def get_queryset(self):                                             # wie gehabt inkl. Annotationen/Vorladen
+        return (
+            Offer.objects
+            .select_related('user')
+            .prefetch_related('details')
+            .annotate(
+                min_delivery_time=Min(
+                    Case(
+                        When(details__delivery_time_in_days__isnull=False, then=F('details__delivery_time_in_days')),
+                        default=F('details__delivery_time'),
+                        output_field=IntegerField(),
+                    )
+                ),
+                min_price=Min('details__price'),
+            )
+        )
+
+    def get_serializer_class(self):                                     # GET vs. PATCH
+        if self.request.method in ('PATCH', 'PUT'):
+            return OfferUpdateSerializer                                # Eingabe-Serializer
+        return OfferRetrieveSerializer                                   # GET-Serializer (id + absolute URLs)
+
+    def patch(self, request, *args, **kwargs):                          # eigene PATCH-Logik mit Output-Serializer
+        offer = self.get_object()                                       # löst 404 + Permissions (IsOwnerOrReadOnly) aus
+        # Eingabe validieren (partial=True)
+        serializer = self.get_serializer(offer, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()                                               # ruft OfferUpdateSerializer.update()
+
+        # Response: vollständiges Offer inkl. voller Details (nicht die URL-Variante)
+        out = OfferPatchResponseSerializer(offer, context={'request': request})
+        return Response(out.data, status=status.HTTP_200_OK)
+    
+    

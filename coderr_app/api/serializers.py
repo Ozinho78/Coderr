@@ -311,3 +311,138 @@ class OfferDetailRetrieveSerializer(serializers.ModelSerializer):         # Einz
             'offer_type',                 # 'basic' | 'standard' | 'premium'
         )
         
+
+# ------------------------------------------------------------
+# <<< NEW: Vollständige Darstellung eines OfferDetails (für PATCH-Response)
+# ------------------------------------------------------------
+class OfferDetailFullSerializer(serializers.ModelSerializer):  # vollständige Felder im Response
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)  # Zahl
+
+    class Meta:
+        model = OfferDetail
+        fields = (
+            'id',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type',
+        )
+
+
+# ------------------------------------------------------------
+# <<< NEW: Eingabe-Serializer für einzelnes Detail im PATCH-Body
+# ------------------------------------------------------------
+class OfferDetailUpdateSerializer(serializers.ModelSerializer):
+    # Wichtig: offer_type MUSS mitgegeben werden, um das Detail eindeutig zu identifizieren
+    offer_type = serializers.ChoiceField(choices=('basic', 'standard', 'premium'), required=True)
+
+    # ID ist optional; wenn mitgegeben, prüfen wir, dass sie zu diesem offer_type gehört
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = OfferDetail
+        # Alle Felder optional (partial update), außer offer_type (s.o.)
+        fields = (
+            'id',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type',
+        )
+        extra_kwargs = {
+            'title': {'required': False, 'allow_blank': True},
+            'revisions': {'required': False},
+            'delivery_time_in_days': {'required': False},
+            'price': {'required': False},
+            'features': {'required': False},
+        }
+
+    def validate_features(self, value):
+        if value is None:
+            return None
+        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            raise serializers.ValidationError('features muss eine Liste aus Strings sein.')
+        return value
+
+
+# ------------------------------------------------------------
+# <<< NEW: Eingabe-Serializer für PATCH /api/offers/{id}/
+#      - aktualisiert Offer-Felder + gemappte Details (via offer_type)
+# ------------------------------------------------------------
+class OfferUpdateSerializer(serializers.ModelSerializer):
+    details = OfferDetailUpdateSerializer(many=True, required=False)  # Liste einzelner Detail-Updates
+
+    class Meta:
+        model = Offer
+        fields = ('title', 'image', 'description', 'details')  # nur Felder, die per PATCH kommen können
+        extra_kwargs = {
+            'title': {'required': False, 'allow_blank': True},
+            'image': {'required': False},
+            'description': {'required': False, 'allow_blank': True},
+        }
+
+    def update(self, instance, validated_data):  # wendet selektive Änderungen an
+        details_data = validated_data.pop('details', None)
+
+        # --- Offer-Felder (nur die übergebenen) ---
+        for f in ('title', 'image', 'description'):
+            if f in validated_data:
+                setattr(instance, f, validated_data[f])
+        instance.save()
+
+        # --- Details-Updates (mapping per offer_type) ---
+        if details_data:
+            # vorhandene Details je Typ sammeln
+            existing_by_type = {d.offer_type: d for d in instance.details.all()}  # related_name='details'
+            allowed_types = {'basic', 'standard', 'premium'}
+
+            for item in details_data:
+                offer_type = item.get('offer_type')
+                if offer_type not in allowed_types:
+                    raise serializers.ValidationError({'details': f'offer_type ungültig: {offer_type}'})
+
+                detail = existing_by_type.get(offer_type)
+                if not detail:
+                    # Detail für diesen Typ existiert nicht → 400 laut Vorgabe (unvollständige Details)
+                    raise serializers.ValidationError({'details': f'Kein Detail für offer_type="{offer_type}" vorhanden.'})
+
+                # Wenn eine id mitgeschickt wurde, MUSS sie zum gefundenen Detail passen
+                if 'id' in item and item['id'] is not None and item['id'] != detail.id:
+                    raise serializers.ValidationError({'details': f'ID {item["id"]} passt nicht zum offer_type="{offer_type}" (erwartet {detail.id}).'})
+
+                # einzelne Felder selektiv setzen (nur die übergebenen)
+                for f in ('title', 'revisions', 'delivery_time_in_days', 'price', 'features'):
+                    if f in item:
+                        setattr(detail, f, item[f])
+
+                # Legacy: delivery_time an delivery_time_in_days spiegeln (falls DB dies erwartet)
+                if 'delivery_time_in_days' in item and item['delivery_time_in_days'] is not None:
+                    detail.delivery_time = item['delivery_time_in_days']  # Sync für Alt-Feld
+
+                # offer_type NICHT ändern (Identität des Pakets bleibt)
+                detail.save()
+
+        return instance  # DRF serialisiert anschließend mit Serializer, den die View verwendet
+
+
+# ------------------------------------------------------------
+# <<< NEW: Response-Serializer für PATCH (kompletter Offer inkl. voller Details)
+# ------------------------------------------------------------
+class OfferPatchResponseSerializer(serializers.ModelSerializer):
+    details = OfferDetailFullSerializer(many=True, read_only=True)  # volle Detail-Objekte im Response
+
+    class Meta:
+        model = Offer
+        fields = (
+            'id',
+            'title',
+            'image',
+            'description',
+            'details',
+        )
+        
+        
