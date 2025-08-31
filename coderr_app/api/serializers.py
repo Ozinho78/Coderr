@@ -469,3 +469,11 @@ class OrderListSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         )
+        
+        
+# --- NEW: Eingabe-Serializer nur für POST /api/orders/ -----------------------
+# Wir wollen nur die ID entgegennehmen. Alles andere holen wir aus dem OfferDetail/Offer/User.
+# (Deine bestehende Ausgabe-Struktur für Orders behalten wir mit OrderListSerializer bei. Siehe Datei: OrderListSerializer existiert bereits und enthält genau die von dir gewünschte Feldauswahl.
+class OrderCreateInputSerializer(serializers.Serializer):
+    # akzeptiert genau ein Feld im Body: offer_detail_id
+    offer_detail_id = serializers.IntegerField(required=True, min_value=1)  # Pflichtfeld, ganze Zahl >= 1

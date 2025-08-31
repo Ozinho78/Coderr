@@ -6,7 +6,8 @@ from coderr_app.api.views import (
     OfferListCreateView,
     OfferRetrieveView,
     OfferDetailRetrieveView,
-    OrderListView
+    OrderListView,
+    OrderListCreateView
 )
 
 
@@ -17,7 +18,8 @@ urlpatterns = [
     path('offers/', OfferListCreateView.as_view(), name='offers-list-create'),  # GET /api/offers/
     path('offers/<int:pk>/', OfferRetrieveView.as_view(), name='offers-detail'), # GET /api/offers/<pk>/
     path('offerdetails/<int:pk>/', OfferDetailRetrieveView.as_view(), name='offerdetails-detail'),
-    path('orders/', OrderListView.as_view(), name='orders-list'),  # GET /api/orders/
+    # path('orders/', OrderListView.as_view(), name='orders-list'),  # GET /api/orders/
+    path('orders/', OrderListCreateView.as_view(), name='orders-list-create'),  # <<< CHANGE (GET + POST)
 ]
 
 

@@ -23,7 +23,9 @@ from coderr_app.api.serializers import (
     OfferDetailRetrieveSerializer, 
     OfferUpdateSerializer, 
     OfferPatchResponseSerializer, 
-    OrderListSerializer)
+    OrderListSerializer,
+    OrderCreateInputSerializer,
+)
 from coderr_app.api.pagination import OfferPageNumberPagination
 
 
@@ -276,3 +278,76 @@ class OrderListView(ListAPIView):
 
         # .distinct() wäre nur nötig, falls Joins Duplikate erzeugen – hier nicht, also weggelassen
         return qs
+    
+
+  
+# OrderListSerializer existiert und liefert genau die Felder, die du im Response-Format sehen willst (IDs, Titel, Preis, Features, offer_type, Status & Timestamps).
+# Order-Modell enthält exakt diese Spalten und Default-Status (in_progress), die beim Create gesetzt werden.
+# OfferDetail besitzt alle benötigten Felder (title, revisions, delivery_time_in_days, price, features, offer_type) und den Link zum Offer, damit wir offer.user als business_user verwenden können. (Siehe deine Modelle/Dumps – neuere Details haben diese Felder bereits; ältere haben ggf. nur name/delivery_time, die ich sauber abfange.)
+class OrderListCreateView(ListCreateAPIView):
+    # GET & POST auf demselben Pfad
+    permission_classes = [IsAuthenticated]        # 401 falls nicht eingeloggt
+    parser_classes = (JSONParser,)                # wir erwarten JSON im Body für POST
+
+    def get_serializer_class(self):
+        # GET → Liste mit OrderListSerializer; POST validiert erst mit dem Input-Serializer
+        if self.request.method == 'POST':
+            return OrderCreateInputSerializer
+        return OrderListSerializer
+
+    def get_queryset(self):
+        # liefert nur Orders zurück, an denen der eingeloggte User beteiligt ist (Kunde ODER Business)
+        user = self.request.user
+        return (
+            Order.objects
+            .filter(Q(customer_user=user) | Q(business_user=user))
+            .order_by('-created_at')
+        )
+
+    def create(self, request, *args, **kwargs):
+        # 1) Eingabe prüfen (nur offer_detail_id erlaubt)
+        in_serializer = self.get_serializer(data=request.data)   # nutzt OrderCreateInputSerializer
+        in_serializer.is_valid(raise_exception=True)             # 400 bei Fehlern
+        offer_detail_id = in_serializer.validated_data['offer_detail_id']  # geprüfte ID
+
+        # 2) Typ-Prüfung: nur 'customer' darf bestellen (403 sonst)
+        try:
+            profile = Profile.objects.get(user=request.user)     # Profil zum eingeloggten User holen
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Kein Profil für den Benutzer gefunden.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if profile.type != 'customer':                           # nur Kunden dürfen Orders erstellen
+            return Response({'detail': 'Nur Kunden dürfen Bestellungen erstellen.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 3) OfferDetail laden (404, wenn nicht vorhanden)
+        try:
+            detail = OfferDetail.objects.select_related('offer', 'offer__user').get(pk=offer_detail_id)
+        except OfferDetail.DoesNotExist:
+            return Response({'detail': 'OfferDetail nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 4) Business = Ersteller des Offers (offer.user)
+        business_user = detail.offer.user                        # Dienstleister
+        customer_user = request.user                             # aktueller Kunde
+
+        # Optional: Kunde darf nicht sein eigenes Offer bestellen (falls gewünscht)
+        if business_user_id := getattr(business_user, 'id', None):
+            if business_user_id == customer_user.id:
+                return Response({'detail': 'Eigene Angebote können nicht bestellt werden.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 5) Felder aus OfferDetail in Order "einfrieren" (Titel/Preis/Features/…)
+        #    Deine Order-DB erwartet genau diese Felder (siehe Modell). :contentReference[oaicite:1]{index=1}
+        order = Order.objects.create(
+            customer_user=customer_user,                         # FK Kunde
+            business_user=business_user,                         # FK Dienstleister
+            title=detail.title or detail.name or 'Bestellung',   # Fallback, falls title leer ist
+            revisions=detail.revisions or 0,                     # Anzahl Revisionen
+            delivery_time_in_days=detail.delivery_time_in_days or detail.delivery_time or 0,  # Tage
+            price=detail.price,                                  # Decimal aus OfferDetail
+            features=detail.features or [],                      # Liste (JSONField)
+            offer_type=detail.offer_type or (detail.name or '').lower() or 'basic',  # best guess bei alten Datensätzen
+            # status bleibt Default 'in_progress'
+        )
+
+        # 6) Ausgabe im geforderten Format (nutzt bereits existierenden List-Serializer)
+        out = OrderListSerializer(order)                         # gleiche Struktur wie GET-Liste
+        return Response(out.data, status=status.HTTP_201_CREATED)
