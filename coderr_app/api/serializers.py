@@ -377,7 +377,7 @@ class OfferPatchResponseSerializer(serializers.ModelSerializer):
         
         
 class OrderListSerializer(serializers.ModelSerializer):
-    # Wir wollen reine IDs zurückgeben (passt zur Vorgabe)
+    """Serializes order list data"""
     customer_user = serializers.PrimaryKeyRelatedField(read_only=True)
     business_user = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -400,10 +400,12 @@ class OrderListSerializer(serializers.ModelSerializer):
         
         
 class OrderCreateInputSerializer(serializers.Serializer):
+    """Serializes order detail id"""
     offer_detail_id = serializers.IntegerField(required=True, min_value=1)
     
 
 class OrderStatusPatchSerializer(serializers.Serializer):
+    """Serializes order status data"""
     status = serializers.ChoiceField(
         choices=Order._meta.get_field('status').choices,
         error_messages={'invalid_choice': 'Ungültiger Status.'}
@@ -421,8 +423,9 @@ class OrderStatusPatchSerializer(serializers.Serializer):
         instance.save(update_fields=['status', 'updated_at'])
         return instance
     
-    
+
 class ReviewListSerializer(serializers.ModelSerializer):
+    """Serializes review list data"""
     business_user = serializers.PrimaryKeyRelatedField(read_only=True)
     reviewer = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -444,6 +447,7 @@ class ReviewListSerializer(serializers.ModelSerializer):
     
     
 class ReviewCreateSerializer(serializers.ModelSerializer):
+    """Serializes review create data"""
     business_user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
 
     class Meta:
@@ -485,6 +489,7 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
 
 
 class ReviewUpdateSerializer(serializers.ModelSerializer):
+    """Serializes review update data"""
     class Meta:
         model = Review
         fields = ('rating', 'description')
