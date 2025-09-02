@@ -39,57 +39,52 @@ class ProfileDetailView(RetrieveUpdateAPIView):
 
     serializer_class = ProfileDetailSerializer
 
-    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]   # Read: offen, Write: auth + owner
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
 
     queryset = Profile.objects.select_related('user').all()
-    lookup_field = 'user_id'        # Feld am Modell (implizit vorhanden durch FK)
-    lookup_url_kwarg = 'pk'         # Name des URL-Params bleibt {pk}
+    lookup_field = 'user_id'
+    lookup_url_kwarg = 'pk'
     
 
-
-    def perform_update(self, serializer):                          # wird bei PATCH/PUT vor .save() aufgerufen
-        profile = self.get_object()                                # holt das Zielprofil (404 falls nicht da)
-        if self.request.user != profile.user:                      # Owner-Check: nur eigener Datensatz
-            raise PermissionDenied('Forbidden: not the owner of this profile.')  # -> 403
-        serializer.save()                                          # speichert Profil + User-Felder
-
+    def perform_update(self, serializer):         
+        profile = self.get_object()               
+        if self.request.user != profile.user:     
+            raise PermissionDenied('Forbidden: not the owner of this profile.')
+        serializer.save()                             
 
 
-class BusinessProfileListView(ListAPIView):                         # GET /api/profiles/business/
-    serializer_class = ProfileListSerializer                        # Ausgabeformat
-    permission_classes = [IsAuthenticated]                          # 401 wenn nicht eingeloggt
-    queryset = Profile.objects.select_related('user').filter(type='business')  # nur Business-Profile, effizient mit JOIN
+class BusinessProfileListView(ListAPIView):                      
+    serializer_class = ProfileListSerializer                     
+    permission_classes = [IsAuthenticated]                       
+    queryset = Profile.objects.select_related('user').filter(type='business')
 
 
-class CustomerProfileListView(ListAPIView):                         # GET /api/profiles/customer/
-    serializer_class = ProfileListSerializer                        # selbes Ausgabeformat
-    permission_classes = [IsAuthenticated]                          # 401 wenn nicht eingeloggt
-    queryset = Profile.objects.select_related('user').filter(type='customer')  # nur Customer-Profile
+class CustomerProfileListView(ListAPIView):                   
+    serializer_class = ProfileListSerializer                  
+    permission_classes = [IsAuthenticated]                    
+    queryset = Profile.objects.select_related('user').filter(type='customer')
     
     
-class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView/ListAPIView)
-    parser_classes = (JSONParser, MultiPartParser, FormParser)  # <<< NEW: JSON + FormData (Bild)
-    pagination_class = OfferPageNumberPagination  # wie gehabt
+class OfferListCreateView(ListCreateAPIView):
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
+    pagination_class = OfferPageNumberPagination
 
-    def get_permissions(self):  # <<< NEW: abhängig von Methode
+    def get_permissions(self):
         if self.request.method == 'POST':
-            # nur eingeloggte Business-User dürfen erstellen
             return [IsAuthenticated(), IsBusinessUser()]
-        return [AllowAny()]  # Liste ist öffentlich
+        return [AllowAny()]
 
-    def get_serializer_class(self):  # <<< NEW: GET vs. POST
+    def get_serializer_class(self):
         if self.request.method == 'POST':
             return OfferCreateSerializer
         return OfferListSerializer
 
     def get_queryset(self):
-        # Basis-Query (User joinen, Details vorladen)
         qs = (
             Offer.objects
             .select_related('user')
             .prefetch_related('details')
             .annotate(
-                # <<< CHANGE: min_delivery_time auf neues Feld mit Fallback
                 min_delivery_time=Min(
                     Case(
                         When(details__delivery_time_in_days__isnull=False, then=F('details__delivery_time_in_days')),
@@ -101,7 +96,6 @@ class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView
             )
         )
 
-        # Filter/Sortierung nur für GET anwenden
         if self.request.method == 'GET':
             params = self.request.query_params
 
@@ -141,41 +135,39 @@ class OfferListCreateView(ListCreateAPIView):  # <<< CHANGE (statt OfferListView
         return qs
     
 
+class OfferRetrieveView(RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = OfferRetrieveSerializer
 
-class OfferRetrieveView(RetrieveAPIView):                                  # <<< NEW: GET /api/offers/<pk>/
-    permission_classes = [IsAuthenticated]                                 # 401, wenn nicht eingeloggt (Anforderung)
-    serializer_class = OfferRetrieveSerializer                             # benutzt absoluten URL-Serializer
-
-    def get_queryset(self):                                                # Query inkl. Annotationen wie in Liste
+    def get_queryset(self):                   
         return (
             Offer.objects
-            .select_related('user')                                        # effizienter JOIN auf user
-            .prefetch_related('details')                                   # Details vorladen
+            .select_related('user')           
+            .prefetch_related('details')      
             .annotate(
-                min_delivery_time=Min(                                     # minimaler Tagewert (neues oder legacy Feld)
+                min_delivery_time=Min(        
                     Case(
                         When(details__delivery_time_in_days__isnull=False, then=F('details__delivery_time_in_days')),
                         default=F('details__delivery_time'),
                         output_field=IntegerField(),
                     )
                 ),
-                min_price=Min('details__price'),                           # minimaler Preis über alle Details
+                min_price=Min('details__price'),       
             )
         )
         
 
-class OfferDetailRetrieveView(RetrieveAPIView):                     # Einzelnes Angebotsdetail abrufen
-    permission_classes = [IsAuthenticated]                          # 401 falls nicht eingeloggt (Vorgabe)
-    serializer_class = OfferDetailRetrieveSerializer                # Ausgabeformat laut Spezifikation
-    queryset = OfferDetail.objects.all()                            # 404 bei unbekannter ID handled DRF automatisch
+class OfferDetailRetrieveView(RetrieveAPIView):        
+    permission_classes = [IsAuthenticated]             
+    serializer_class = OfferDetailRetrieveSerializer   
+    queryset = OfferDetail.objects.all()               
     
     
-class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch PATCH + DELETE
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]  # CHANGE: Owner-Gate für Write/DELETE, 401: nicht eingeloggt, 403: nicht der Owner (nur Ersteller darf löschen/ändern)
-    serializer_class = OfferRetrieveSerializer  # GET nutzt weiterhin die Detailausgabe (mit absoluten URLs)
+class OfferRetrieveView(RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    serializer_class = OfferRetrieveSerializer
 
-    # get_queryset() bleibt unverändert (Annotationen, Prefetch, etc.)
-    def get_queryset(self):                                             # wie gehabt inkl. Annotationen/Vorladen
+    def get_queryset(self):                        
         return (
             Offer.objects
             .select_related('user')
@@ -192,27 +184,22 @@ class OfferRetrieveView(RetrieveUpdateDestroyAPIView):  # <<< CHANGE: jetzt auch
             )
         )
 
-    def get_serializer_class(self):                                     # GET vs. PATCH
+    def get_serializer_class(self):                        
         if self.request.method in ('PATCH', 'PUT'):
-            return OfferUpdateSerializer                                # Eingabe-Serializer
-        return OfferRetrieveSerializer                                   # GET-Serializer (id + absolute URLs)
+            return OfferUpdateSerializer                   
+        return OfferRetrieveSerializer                     
 
-    def patch(self, request, *args, **kwargs):                          # eigene PATCH-Logik mit Output-Serializer
-        offer = self.get_object()                                       # löst 404 + Permissions (IsOwnerOrReadOnly) aus
-        # Eingabe validieren (partial=True)
+    def patch(self, request, *args, **kwargs):             
+        offer = self.get_object()                          
         serializer = self.get_serializer(offer, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()                                               # ruft OfferUpdateSerializer.update()
-
-        # Response: vollständiges Offer inkl. voller Details (nicht die URL-Variante)
+        serializer.save()
         out = OfferPatchResponseSerializer(offer, context={'request': request})
         return Response(out.data, status=status.HTTP_200_OK)
     
     
 class OrderListView(ListAPIView):
-    # Nur eingeloggte Nutzer → 401 wenn nicht authentifiziert
     permission_classes = [IsAuthenticated]
-    # Serializer bestimmt das Antwortformat
     serializer_class = OrderListSerializer
 
     def get_queryset(self):
@@ -221,25 +208,22 @@ class OrderListView(ListAPIView):
         qs = (
             Order.objects
             .filter(Q(customer_user=user) | Q(business_user=user))
-            .order_by('-created_at')   # neueste zuerst (komfortabel für die Liste)
+            .order_by('-created_at')
         )
         return qs
     
 
   
 class OrderListCreateView(ListCreateAPIView):
-    # GET & POST auf demselben Pfad
-    permission_classes = [IsAuthenticated]        # 401 falls nicht eingeloggt
-    parser_classes = (JSONParser,)                # wir erwarten JSON im Body für POST
+    permission_classes = [IsAuthenticated]
+    parser_classes = (JSONParser,)        
 
     def get_serializer_class(self):
-        # GET → Liste mit OrderListSerializer; POST validiert erst mit dem Input-Serializer
         if self.request.method == 'POST':
             return OrderCreateInputSerializer
         return OrderListSerializer
 
     def get_queryset(self):
-        # liefert nur Orders zurück, an denen der eingeloggte User beteiligt ist (Kunde ODER Business)
         user = self.request.user
         return (
             Order.objects
@@ -252,66 +236,57 @@ class OrderListCreateView(ListCreateAPIView):
         in_serializer.is_valid(raise_exception=True)          
         offer_detail_id = in_serializer.validated_data['offer_detail_id']
         try:
-            profile = Profile.objects.get(user=request.user)     # Profil zum eingeloggten User holen
+            profile = Profile.objects.get(user=request.user)
         except Profile.DoesNotExist:
             return Response({'detail': 'Kein Profil für den Benutzer gefunden.'}, status=status.HTTP_403_FORBIDDEN)
 
-        if profile.type != 'customer':                           # nur Kunden dürfen Orders erstellen
+        if profile.type != 'customer':                      
             return Response({'detail': 'Nur Kunden dürfen Bestellungen erstellen.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3) OfferDetail laden (404, wenn nicht vorhanden)
         try:
             detail = OfferDetail.objects.select_related('offer', 'offer__user').get(pk=offer_detail_id)
         except OfferDetail.DoesNotExist:
             return Response({'detail': 'OfferDetail nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
 
-        business_user = detail.offer.user                        # Dienstleister
-        customer_user = request.user                             # aktueller Kunde
+        business_user = detail.offer.user
+        customer_user = request.user
         if business_user_id := getattr(business_user, 'id', None):
             if business_user_id == customer_user.id:
                 return Response({'detail': 'Eigene Angebote können nicht bestellt werden.'}, status=status.HTTP_403_FORBIDDEN)
 
         order = Order.objects.create(
-            customer_user=customer_user,                         # FK Kunde
-            business_user=business_user,                         # FK Dienstleister
-            title=detail.title or detail.name or 'Bestellung',   # Fallback, falls title leer ist
-            revisions=detail.revisions or 0,                     # Anzahl Revisionen
-            delivery_time_in_days=detail.delivery_time_in_days or detail.delivery_time or 0,  # Tage
-            price=detail.price,                                  # Decimal aus OfferDetail
-            features=detail.features or [],                      # Liste (JSONField)
-            offer_type=detail.offer_type or (detail.name or '').lower() or 'basic',  # best guess bei alten Datensätzen
-            # status bleibt Default 'in_progress'
+            customer_user=customer_user,
+            business_user=business_user,
+            title=detail.title or detail.name or 'Bestellung',
+            revisions=detail.revisions or 0,                  
+            delivery_time_in_days=detail.delivery_time_in_days or detail.delivery_time or 0,
+            price=detail.price,                      
+            features=detail.features or [],          
+            offer_type=detail.offer_type or (detail.name or '').lower() or 'basic',
         )
-
-        # 6) Ausgabe im geforderten Format (nutzt bereits existierenden List-Serializer)
-        out = OrderListSerializer(order)                         # gleiche Struktur wie GET-Liste
+        out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_201_CREATED)
     
     
 class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
-    queryset = Order.objects.all()               # Basis-Query
-    permission_classes = [IsAuthenticated]       # Auth-Pflicht (401 sonst)
+    queryset = Order.objects.all()
+    permission_classes = [IsAuthenticated]
     lookup_field = 'pk'
-    parser_classes = (JSONParser,)               # JSON-Body parsen
+    parser_classes = (JSONParser,)        
 
     def get_serializer_class(self):
-        # PATCH/PUT → Eingabe-Serializer (nur 'status'); GET → Vollausgabe
         return OrderStatusPatchSerializer if self.request.method in ('PATCH', 'PUT') else OrderListSerializer
 
     def update(self, request, *args, **kwargs):
-        # PUT bewusst blocken – nur PATCH erlaubt
         if request.method == 'PUT':
             return Response({'detail': 'Nur PATCH ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1) Order laden (404 automatisch bei Nichtfinden)
         order = self.get_object()
 
-        # 2) Typ-Check: nur Business-User dürfen Status ändern
         profile = Profile.objects.filter(user=request.user).first()
         if not profile or profile.type != 'business':
             return Response({'detail': 'Nur Business-User dürfen den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3) Ownership: nur der Business-Owner der Order darf updaten
         if order.business_user_id != request.user.id:
             return Response({'detail': 'Forbidden: nicht der Besitzer dieser Bestellung.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -337,21 +312,16 @@ class OrderInProgressCountView(APIView):
 
     def get(self, request, business_user_id):
         try:
-            user = User.objects.get(pk=business_user_id)       # User mit der ID laden
+            user = User.objects.get(pk=business_user_id)
         except User.DoesNotExist:
-            # Vorgabe: 404, wenn kein Geschäftsnutzer mit dieser ID existiert
             return Response({'detail': 'Kein Geschäftsnutzer mit dieser ID gefunden.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 2) Ist es wirklich ein Business-Profil?
-        profile = Profile.objects.filter(user=user).first()     # Profil holen (falls vorhanden)
+        profile = Profile.objects.filter(user=user).first()
         if not profile or profile.type != 'business':
-            # Kein Business-User → wie „nicht gefunden“ behandeln
             return Response({'detail': 'Kein Geschäftsnutzer mit dieser ID gefunden.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 3) Anzahl laufender Bestellungen zählen (Status = in_progress)
         count = Order.objects.filter(business_user_id=business_user_id, status='in_progress').count()
 
-        # 4) Erfolgreiche Antwort
         return Response({'order_count': count}, status=status.HTTP_200_OK)
     
     
@@ -359,7 +329,6 @@ class CompletedOrderCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, business_user_id):
-        # 1) Existiert der User?
         try:
             user = User.objects.get(pk=business_user_id)
         except User.DoesNotExist:
@@ -368,7 +337,6 @@ class CompletedOrderCountView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # 2) Ist es ein Business-Profil?
         profile = Profile.objects.filter(user=user).first()
         if not profile or profile.type != 'business':
             return Response(
@@ -376,31 +344,24 @@ class CompletedOrderCountView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # 3) Anzahl abgeschlossener Bestellungen zählen
         count = Order.objects.filter(
             business_user_id=business_user_id,
             status='completed'
         ).count()
 
-        # 4) Erfolgreiche Antwort
         return Response({'completed_order_count': count}, status=status.HTTP_200_OK)
     
     
 class ReviewListView(ListCreateAPIView):
-    permission_classes = [IsAuthenticated]     # 401 wenn nicht eingeloggt
-    pagination_class = None                    # flache Liste, nicht paginiert
+    permission_classes = [IsAuthenticated]
+    pagination_class = None        
 
     def get_serializer_class(self):
-        # GET → List-Serializer, POST → Create-Serializer
         return ReviewCreateSerializer if self.request.method == 'POST' else ReviewListSerializer
 
     def get_queryset(self):
-        # Standard: neueste zuerst
         qs = Review.objects.all().order_by('-updated_at')
-
-        # Filter/Ordering wie zuvor
         params = self.request.query_params
-
         business_user_id = params.get('business_user_id')
         if business_user_id:
             if not str(business_user_id).isdigit():
@@ -421,33 +382,27 @@ class ReviewListView(ListCreateAPIView):
         return qs
 
     def create(self, request, *args, **kwargs):
-        # Nur Kunden dürfen erstellen (explizit prüfen, damit wir saubere Meldung/403 liefern)
         profile = Profile.objects.filter(user=request.user).first()
         if not profile or profile.type != 'customer':
             return Response({'detail': 'Nur Kunden dürfen Bewertungen erstellen.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Validierung + Erzeugung
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        review = serializer.save()  # create() setzt reviewer
+        review = serializer.save()
 
-        # Ausgabe im Leseformat (inkl. reviewer/business_user IDs + Timestamps)
         out = ReviewListSerializer(review)
         return Response(out.data, status=status.HTTP_201_CREATED)    
 
-    
-    
+
 class ReviewDetailView(RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]     # 401 für alle Write/Read ohne Login
-    queryset = Review.objects.all()            # 404 handled DRF
+    permission_classes = [IsAuthenticated]
+    queryset = Review.objects.all()
     lookup_field = 'pk'
 
     def get_serializer_class(self):
-        # PATCH → Update-Serializer (nur rating/description), GET → List-Serializer
         return ReviewUpdateSerializer if self.request.method in ('PATCH', 'PUT') else ReviewListSerializer
 
     def update(self, request, *args, **kwargs):
-        # Nur Ersteller darf bearbeiten
         review = self.get_object()
         if review.reviewer_id != request.user.id:
             return Response({'detail': 'Forbidden: nicht der Ersteller dieser Bewertung.'}, status=status.HTTP_403_FORBIDDEN)
@@ -457,14 +412,12 @@ class ReviewDetailView(RetrieveUpdateDestroyAPIView):
 
         serializer = self.get_serializer(review, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()  # speichert rating/description; updated_at aktualisiert sich automatisch
+        serializer.save()
 
-        # Antwort im Leseformat inkl. IDs/Timestamps
         out = ReviewListSerializer(review)
         return Response(out.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
-        # Nur Ersteller darf löschen
         review = self.get_object()
         if review.reviewer_id != request.user.id:
             return Response({'detail': 'Forbidden: nicht der Ersteller dieser Bewertung.'}, status=status.HTTP_403_FORBIDDEN)
@@ -474,26 +427,19 @@ class ReviewDetailView(RetrieveUpdateDestroyAPIView):
     
     
 class BaseInfoView(APIView):
-    permission_classes = [AllowAny]  # öffentlich: keine Auth-Pflicht
+    permission_classes = [AllowAny]
 
     def get(self, request):
         try:
-            # --- Reviews zählen + Durchschnitt berechnen ---
             agg = Review.objects.aggregate(
-                review_count=Count('id'),   # Anzahl Bewertungen
-                avg_rating=Avg('rating'),   # Durchschnittsrating (kann None sein)
+                review_count=Count('id'),
+                avg_rating=Avg('rating'),
             )
-            review_count = agg['review_count'] or 0            # None→0 absichern
-            avg_raw = agg['avg_rating'] or 0                   # None→0 absichern
-            average_rating = round(float(avg_raw), 1) if review_count > 0 else 0.0  # eine Dezimalstelle
-
-            # --- Anzahl Business-Profile ---
+            review_count = agg['review_count'] or 0
+            avg_raw = agg['avg_rating'] or 0       
+            average_rating = round(float(avg_raw), 1) if review_count > 0 else 0.0
             business_profile_count = Profile.objects.filter(type='business').count()
-
-            # --- Anzahl Offers ---
             offer_count = Offer.objects.count()
-
-            # --- Response nach Vorgabe ---
             data = {
                 'review_count': review_count,
                 'average_rating': average_rating,
@@ -502,5 +448,4 @@ class BaseInfoView(APIView):
             }
             return Response(data, status=status.HTTP_200_OK)
         except Exception:
-            # Fallback laut Vorgabe
             return Response({'detail': 'Interner Serverfehler.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
