@@ -14,7 +14,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
-from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser
+from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser, IsCustomerUser
 from auth_app.models import Profile
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer, ReviewListSerializer
 from coderr_app.models import Offer, OfferDetail, Order, Review
@@ -370,6 +370,11 @@ class ReviewListView(ListCreateAPIView):
     """Provides review list view"""
     permission_classes = [IsAuthenticated]
     pagination_class = None        
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsCustomerUser()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         return ReviewCreateSerializer if self.request.method == 'POST' else ReviewListSerializer

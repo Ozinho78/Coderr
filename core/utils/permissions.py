@@ -19,3 +19,15 @@ class IsBusinessUser(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         return Profile.objects.filter(user=request.user, type='business').exists()
+    
+    
+class IsCustomerUser(BasePermission):
+    message = 'Nur Kunden dürfen Bewertungen erstellen.'
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        profile = Profile.objects.filter(user=request.user).first()
+        return bool(profile and (profile.type or '').lower() == 'customer')

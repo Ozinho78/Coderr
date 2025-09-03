@@ -468,11 +468,11 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'detail': 'Authentication required.'})
 
         r_profile = Profile.objects.filter(user=reviewer).first()
-        if not r_profile or r_profile.type != 'customer':
+        if not r_profile or (r_profile.type or '').lower() != 'customer':
             raise serializers.ValidationError({'detail': 'Nur Kunden dürfen Bewertungen erstellen.'})
 
         b_profile = Profile.objects.filter(user=business_user).first()
-        if not b_profile or b_profile.type != 'business':
+        if not b_profile or (b_profile.type or '').lower() != 'business':
             raise serializers.ValidationError({'business_user': 'Kein gültiger Business-Benutzer.'})
 
         if reviewer.id == business_user.id:
