@@ -1,3 +1,4 @@
+"""Reusable validators for user input to keep serializers and views as short as possible"""
 import re
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ValidationError

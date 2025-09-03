@@ -36,7 +36,7 @@ from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumbe
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
-    """Retrieves or updates the authenticated user's profile identified by user_id, rejects access if the requesting user is not the owner."""
+    """Retrieves or updates the authenticated user's profile identified by user-id, rejects access if the requesting user is not the owner."""
     serializer_class = ProfileDetailSerializer
     permission_classes = [IsAuthenticated]
     queryset = Profile.objects.select_related('user').all()

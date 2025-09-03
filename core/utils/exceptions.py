@@ -1,3 +1,4 @@
+"""Provides custom exception handling for project"""
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -6,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def exception_handler_status500(exc, context):
-    """Handles status 500 exception"""
+    """Custom DRF exceptions handling and HTTP codes for predictable API responses"""
     response = exception_handler(exc, context)
 
     if response is None:
