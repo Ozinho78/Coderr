@@ -36,7 +36,7 @@ from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumbe
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
-    """Provides profile detail view"""
+    """Retrieves or updates the authenticated user's profile identified by user_id, rejects access if the requesting user is not the owner."""
     serializer_class = ProfileDetailSerializer
     permission_classes = [IsAuthenticated]
     queryset = Profile.objects.select_related('user').all()
@@ -58,21 +58,21 @@ class ProfileDetailView(RetrieveUpdateAPIView):
 
 
 class BusinessProfileListView(ListAPIView):                      
-    """Provides business profile view"""
+    """List business profiles with optional filtering, read-only endpoint just for viewing"""
     serializer_class = ProfileListSerializer                     
     permission_classes = [IsAuthenticated]                       
     queryset = Profile.objects.select_related('user').filter(type='business')
 
 
 class CustomerProfileListView(ListAPIView):                   
-    """Provides customer profile view"""
+    """'List customer profiles with optional filtering, read-only endpoint for administration"""
     serializer_class = ProfileListSerializer                  
     permission_classes = [IsAuthenticated]                    
     queryset = Profile.objects.select_related('user').filter(type='customer')
     
     
 class OfferListCreateView(ListCreateAPIView):
-    """Provides offer list create view"""
+    """Lists all offers or creates a new one as a business user, applies validation and ownership on creation"""
     parser_classes = (JSONParser, MultiPartParser, FormParser)
     pagination_class = OfferPageNumberPagination
 
@@ -143,7 +143,7 @@ class OfferListCreateView(ListCreateAPIView):
     
 
 class OfferRetrieveView(RetrieveAPIView):
-    """Provides offer retrieve view"""
+    """'Returns a single offer by ID, read-only access for viewing offer basics"""
     permission_classes = [IsAuthenticated]
     serializer_class = OfferRetrieveSerializer
 
@@ -166,14 +166,14 @@ class OfferRetrieveView(RetrieveAPIView):
         
 
 class OfferDetailRetrieveView(RetrieveAPIView):        
-    """Provides offer detail retrieve view"""
+    """Returns an offer with its details"""
     permission_classes = [IsAuthenticated]             
     serializer_class = OfferDetailRetrieveSerializer   
     queryset = OfferDetail.objects.all()               
     
     
 class OfferRetrieveView(RetrieveUpdateDestroyAPIView):
-    """Provides offer retrieve view"""
+    """Returns a single offer by ID, read-only access for viewing offer basic info"""
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     serializer_class = OfferRetrieveSerializer
 
@@ -209,7 +209,7 @@ class OfferRetrieveView(RetrieveUpdateDestroyAPIView):
     
     
 class OrderListView(ListAPIView):
-    """Provides offer list view"""
+    """Lists orders visible to the authenticated user"""
     permission_classes = [IsAuthenticated]
     serializer_class = OrderListSerializer
 
@@ -225,7 +225,7 @@ class OrderListView(ListAPIView):
     
 
 class OrderListCreateView(ListCreateAPIView):
-    """Provides order list create view"""
+    """Lists orders or creates a new order for the current customer"""
     permission_classes = [IsAuthenticated]
     parser_classes = (JSONParser,)        
 
@@ -280,7 +280,7 @@ class OrderListCreateView(ListCreateAPIView):
     
     
 class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
-    """Provides order status update view"""
+    """Updates the status of an order by ID, restricted to the business owner of the order or staff member"""
     queryset = Order.objects.all()
     permission_classes = [IsAuthenticated]
     lookup_field = 'pk'
@@ -320,7 +320,7 @@ class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
     
 
 class OrderInProgressCountView(APIView):
-    """Provides order in progress view"""
+    """Returns the number of in-progress orders for a given business-user-id"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, business_user_id):
@@ -339,7 +339,7 @@ class OrderInProgressCountView(APIView):
     
     
 class CompletedOrderCountView(APIView):
-    """Provides completed order count view"""
+    """Returns the number of completed orders for a given business-user-id"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, business_user_id):
@@ -367,7 +367,7 @@ class CompletedOrderCountView(APIView):
     
     
 class ReviewListView(ListCreateAPIView):
-    """Provides review list view"""
+    """Lists reviews or creates a new review as a customer"""
     permission_classes = [IsAuthenticated]
     pagination_class = None        
 
@@ -415,7 +415,7 @@ class ReviewListView(ListCreateAPIView):
 
 
 class ReviewDetailView(RetrieveUpdateDestroyAPIView):
-    """Provides review detail view"""
+    """Retrieves, updates, or deletes a single review by ID"""
     permission_classes = [IsAuthenticated]
     queryset = Review.objects.all()
     lookup_field = 'pk'
@@ -448,7 +448,7 @@ class ReviewDetailView(RetrieveUpdateDestroyAPIView):
     
     
 class BaseInfoView(APIView):
-    """Provides base info view"""
+    """Returns platform summary (reviews, average rating, business count, offer count) for the dashboard."""
     permission_classes = [AllowAny]
 
     def get(self, request):
