@@ -1,3 +1,4 @@
+"""Provides the two views for registration and authentication"""
 from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
@@ -7,7 +8,7 @@ from auth_app.api.serializers import RegistrationSerializer, LoginSerializer
 
 
 class RegistrationView(APIView):
-    """Provides registration view"""
+    """Handles user registration and returns token and basic user info"""
     authentication_classes = []
     permission_classes = []
 
@@ -32,7 +33,7 @@ class RegistrationView(APIView):
             
             
 class LoginView(APIView):
-    """Provides login view"""
+    """Authenticates a user and returns a token with basic user info"""
     authentication_classes = []
     permission_classes = []
 
