@@ -10,7 +10,7 @@ from rest_framework.generics import (
     RetrieveUpdateDestroyAPIView,
 )
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
@@ -38,14 +38,18 @@ from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumbe
 class ProfileDetailView(RetrieveUpdateAPIView):
     """Provides profile detail view"""
     serializer_class = ProfileDetailSerializer
-
-    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
-
+    permission_classes = [IsAuthenticated]
     queryset = Profile.objects.select_related('user').all()
     lookup_field = 'user_id'
     lookup_url_kwarg = 'pk'
     
-
+    def retrieve(self, request, *args, **kwargs):
+        profile = self.get_object()
+        if request.user.id != profile.user_id:
+            raise PermissionDenied('Forbidden: not the owner of this profile.')
+        serializer = self.get_serializer(profile)
+        return Response(serializer.data)
+    
     def perform_update(self, serializer):         
         profile = self.get_object()               
         if self.request.user != profile.user:     
