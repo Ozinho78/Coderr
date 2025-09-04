@@ -38,17 +38,10 @@ from coderr_app.queries.order_services import build_order_queryset, create_order
 class ProfileDetailView(RetrieveUpdateAPIView):
     """Retrieves or updates the authenticated user's profile identified by user-id, rejects access if the requesting user is not the owner."""
     serializer_class = ProfileDetailSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     queryset = Profile.objects.select_related('user').all()
     lookup_field = 'user_id'
     lookup_url_kwarg = 'pk'
-    
-    def retrieve(self, request, *args, **kwargs):
-        profile = self.get_object()
-        if request.user.id != profile.user_id:
-            raise PermissionDenied('Forbidden: not the owner of this profile.')
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
     
     def perform_update(self, serializer):         
         profile = self.get_object()               
