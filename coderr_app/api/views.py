@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from core.utils.permissions import IsOwnerOrReadOnly, IsBusinessUser, IsCustomerUser
+from core.utils.query import parse_int_param
 from auth_app.models import Profile
 from coderr_app.api.serializers import ProfileDetailSerializer, ProfileListSerializer, ReviewListSerializer
 from coderr_app.models import Offer, OfferDetail, Order, Review
@@ -178,46 +179,44 @@ class OrderListCreateView(ListCreateAPIView):
         order = create_order_from_offer_detail(request, in_serializer.validated_data)
         out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_201_CREATED)
-    
+
 
 class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
     """Updates the status of an order by ID, restricted to the business owner of the order or staff member"""
     queryset = Order.objects.all()
     permission_classes = [IsAuthenticated]
     lookup_field = 'pk'
-    parser_classes = (JSONParser,)        
+    parser_classes = (JSONParser,)
 
     def get_serializer_class(self):
         return OrderStatusPatchSerializer if self.request.method in ('PATCH', 'PUT') else OrderListSerializer
+
+    def check_business_permissions(self, order):
+        profile = Profile.objects.filter(user=self.request.user).first()
+        if not profile or profile.type != 'business':
+            return Response({'detail': 'Nur Business-User dürfen den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
+        if order.business_user_id != self.request.user.id:
+            return Response({'detail': 'Forbidden: nicht der Besitzer dieser Bestellung.'}, status=status.HTTP_403_FORBIDDEN)
+        return None
 
     def update(self, request, *args, **kwargs):
         if request.method == 'PUT':
             return Response({'detail': 'Nur PATCH ist erlaubt.'}, status=status.HTTP_400_BAD_REQUEST)
 
         order = self.get_object()
-
-        profile = Profile.objects.filter(user=request.user).first()
-        if not profile or profile.type != 'business':
-            return Response({'detail': 'Nur Business-User dürfen den Status ändern.'}, status=status.HTTP_403_FORBIDDEN)
-
-        if order.business_user_id != request.user.id:
-            return Response({'detail': 'Forbidden: nicht der Besitzer dieser Bestellung.'}, status=status.HTTP_403_FORBIDDEN)
+        error = self.check_business_permissions(order)
+        if error:
+            return error
 
         serializer = self.get_serializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        serializer = self.get_serializer(order, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        out = OrderListSerializer(order)
-        return Response(out.data, status=status.HTTP_200_OK)
+        return Response(OrderListSerializer(order).data, status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
         if not request.user.is_staff:
             return Response({'detail': 'Nur Staff-Benutzer dürfen Bestellungen löschen.'}, status=status.HTTP_403_FORBIDDEN)
-        obj = self.get_object()
-        self.perform_destroy(obj)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return super().delete(request, *args, **kwargs)
     
 
 class OrderInProgressCountView(APIView):
@@ -270,7 +269,7 @@ class CompletedOrderCountView(APIView):
 class ReviewListView(ListCreateAPIView):
     """Lists reviews or creates a new review as a customer"""
     permission_classes = [IsAuthenticated]
-    pagination_class = None        
+    pagination_class = None
 
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -281,25 +280,25 @@ class ReviewListView(ListCreateAPIView):
         return ReviewCreateSerializer if self.request.method == 'POST' else ReviewListSerializer
 
     def get_queryset(self):
-        qs = Review.objects.all().order_by('-updated_at')
         params = self.request.query_params
-        business_user_id = params.get('business_user_id')
+        qs = Review.objects.all()
+        
+        business_user_id = parse_int_param(params, 'business_user_id')
         if business_user_id:
-            if not str(business_user_id).isdigit():
-                raise ValidationError({'business_user_id': 'Muss eine ganze Zahl sein.'})
-            qs = qs.filter(business_user_id=int(business_user_id))
+            qs = qs.filter(business_user_id=business_user_id)
 
-        reviewer_id = params.get('reviewer_id')
+        reviewer_id = parse_int_param(params, 'reviewer_id')
         if reviewer_id:
-            if not str(reviewer_id).isdigit():
-                raise ValidationError({'reviewer_id': 'Muss eine ganze Zahl sein.'})
-            qs = qs.filter(reviewer_id=int(reviewer_id))
+            qs = qs.filter(reviewer_id=reviewer_id)
 
         ordering = params.get('ordering')
         if ordering:
             if ordering not in {'updated_at', 'rating'}:
                 raise ValidationError({'ordering': 'Ungültig: updated_at oder rating'})
             qs = qs.order_by(ordering)
+        else:
+            qs = qs.order_by('-updated_at')
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -310,9 +309,7 @@ class ReviewListView(ListCreateAPIView):
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         review = serializer.save()
-
-        out = ReviewListSerializer(review)
-        return Response(out.data, status=status.HTTP_201_CREATED)    
+        return Response(ReviewListSerializer(review).data, status=status.HTTP_201_CREATED)   
 
 
 class ReviewDetailView(RetrieveUpdateDestroyAPIView):
