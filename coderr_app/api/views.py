@@ -31,6 +31,8 @@ from coderr_app.api.serializers import (
     ReviewUpdateSerializer,
 )
 from coderr_app.api.pagination import OfferPageNumberPagination
+from coderr_app.queries.offer_filters import build_offer_queryset
+from coderr_app.queries.order_services import build_order_queryset, create_order_from_offer_detail
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
@@ -75,69 +77,13 @@ class OfferListCreateView(ListCreateAPIView):
     pagination_class = OfferPageNumberPagination
 
     def get_permissions(self):
-        if self.request.method == 'POST':
-            return [IsAuthenticated(), IsBusinessUser()]
-        return [AllowAny()]
+        return [IsAuthenticated(), IsBusinessUser()] if self.request.method == 'POST' else [AllowAny()]
 
     def get_serializer_class(self):
-        if self.request.method == 'POST':
-            return OfferCreateSerializer
-        return OfferListSerializer
+        return OfferCreateSerializer if self.request.method == 'POST' else OfferListSerializer
 
     def get_queryset(self):
-        qs = (
-            Offer.objects
-            .select_related('user')
-            .prefetch_related('details')
-            .annotate(
-                min_delivery_time=Min(
-                    Case(
-                        When(details__delivery_time_in_days__isnull=False, then=F('details__delivery_time_in_days')),
-                        default=F('details__delivery_time'),
-                        output_field=IntegerField(),
-                    )
-                ),
-                min_price=Min('details__price'),
-            )
-        )
-
-        if self.request.method == 'GET':
-            params = self.request.query_params
-
-            creator_id = params.get('creator_id')
-            if creator_id:
-                if not str(creator_id).isdigit():
-                    raise ValidationError({'creator_id': 'Muss eine ganze Zahl sein.'})
-                qs = qs.filter(user_id=int(creator_id))
-
-            min_price = params.get('min_price')
-            if min_price:
-                try:
-                    min_price_val = float(min_price)
-                except ValueError:
-                    raise ValidationError({'min_price': 'Muss eine Zahl sein.'})
-                qs = qs.filter(min_price__gte=min_price_val)
-
-            max_delivery_time = params.get('max_delivery_time')
-            if max_delivery_time:
-                if not str(max_delivery_time).isdigit():
-                    raise ValidationError({'max_delivery_time': 'Muss eine ganze Zahl (Tage) sein.'})
-                qs = qs.filter(min_delivery_time__lte=int(max_delivery_time))
-
-            search = params.get('search')
-            if search:
-                qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search))
-
-            ordering = params.get('ordering')
-            if ordering:
-                allowed = {'updated_at', '-updated_at', 'min_price', '-min_price'}
-                if ordering not in allowed:
-                    raise ValidationError({'ordering': 'Ungültig: updated_at, -updated_at, min_price, -min_price'})
-                qs = qs.order_by(ordering)
-            else:
-                qs = qs.order_by('-updated_at')
-
-        return qs
+        return build_offer_queryset(self.request)
     
 
 class OfferRetrieveView(RetrieveAPIView):
@@ -225,58 +171,22 @@ class OrderListView(ListAPIView):
 class OrderListCreateView(ListCreateAPIView):
     """Lists orders or creates a new order for the current customer"""
     permission_classes = [IsAuthenticated]
-    parser_classes = (JSONParser,)        
+    parser_classes = (JSONParser,)
 
     def get_serializer_class(self):
-        if self.request.method == 'POST':
-            return OrderCreateInputSerializer
-        return OrderListSerializer
+        return OrderCreateInputSerializer if self.request.method == 'POST' else OrderListSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        return (
-            Order.objects
-            .filter(Q(customer_user=user) | Q(business_user=user))
-            .order_by('-created_at')
-        )
+        return build_order_queryset(self.request)
 
     def create(self, request, *args, **kwargs):
         in_serializer = self.get_serializer(data=request.data)
-        in_serializer.is_valid(raise_exception=True)          
-        offer_detail_id = in_serializer.validated_data['offer_detail_id']
-        try:
-            profile = Profile.objects.get(user=request.user)
-        except Profile.DoesNotExist:
-            return Response({'detail': 'Kein Profil für den Benutzer gefunden.'}, status=status.HTTP_403_FORBIDDEN)
-
-        if profile.type != 'customer':                      
-            return Response({'detail': 'Nur Kunden dürfen Bestellungen erstellen.'}, status=status.HTTP_403_FORBIDDEN)
-
-        try:
-            detail = OfferDetail.objects.select_related('offer', 'offer__user').get(pk=offer_detail_id)
-        except OfferDetail.DoesNotExist:
-            return Response({'detail': 'OfferDetail nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
-
-        business_user = detail.offer.user
-        customer_user = request.user
-        if business_user_id := getattr(business_user, 'id', None):
-            if business_user_id == customer_user.id:
-                return Response({'detail': 'Eigene Angebote können nicht bestellt werden.'}, status=status.HTTP_403_FORBIDDEN)
-
-        order = Order.objects.create(
-            customer_user=customer_user,
-            business_user=business_user,
-            title=detail.title or detail.name or 'Bestellung',
-            revisions=detail.revisions or 0,                  
-            delivery_time_in_days=detail.delivery_time_in_days or detail.delivery_time or 0,
-            price=detail.price,                      
-            features=detail.features or [],          
-            offer_type=detail.offer_type or (detail.name or '').lower() or 'basic',
-        )
+        in_serializer.is_valid(raise_exception=True)
+        order = create_order_from_offer_detail(request, in_serializer.validated_data)
         out = OrderListSerializer(order)
         return Response(out.data, status=status.HTTP_201_CREATED)
     
-    
+
 class OrderStatusUpdateView(RetrieveUpdateDestroyAPIView):
     """Updates the status of an order by ID, restricted to the business owner of the order or staff member"""
     queryset = Order.objects.all()
