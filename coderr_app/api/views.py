@@ -1,5 +1,4 @@
 from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404
 from django.db.models import Min, Q, Case, When, F, IntegerField, Avg, Count
 from rest_framework.views import APIView
 from rest_framework.generics import (
@@ -9,7 +8,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
@@ -31,8 +30,7 @@ from coderr_app.api.serializers import (
     ReviewCreateSerializer,
     ReviewUpdateSerializer,
 )
-from coderr_app.api.pagination import OfferPageNumberPagination, ReviewPageNumberPagination
-
+from coderr_app.api.pagination import OfferPageNumberPagination
 
 
 class ProfileDetailView(RetrieveUpdateAPIView):
